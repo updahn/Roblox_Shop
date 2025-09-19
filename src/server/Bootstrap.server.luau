@@ -19,7 +19,15 @@ spawn(function()
     end
 end)
 
--- 第三步: 启动主服务端逻辑（注意文件扩展名）
+-- 第三步: 启动管理员服务
+spawn(function()
+    local adminService = script.Parent:FindFirstChild("AdminService")
+    if adminService then
+        require(adminService)
+    end
+end)
+
+-- 第四步: 启动主服务端逻辑（注意文件扩展名）
 spawn(function()
     wait(0.1) -- 短暂延迟确保一切就绪
     local mainScript = script.Parent:FindFirstChild("init.server")

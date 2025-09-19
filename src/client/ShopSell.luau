@@ -111,7 +111,7 @@ function ShopSell.createItemCard(item, itemId, shopData, playerData, showQuantit
     descLabel.Parent = card
 
     -- 卖出价格标签
-    local sellPrice = math.floor(item.price * 0.8)
+    local sellPrice = ShopData.calculateSellPrice(item.price)
     local priceLabel = Instance.new("TextLabel")
     priceLabel.Name = "PriceLabel"
     priceLabel.Text = "💰 " .. sellPrice .. " 金币"
@@ -127,7 +127,7 @@ function ShopSell.createItemCard(item, itemId, shopData, playerData, showQuantit
 
     -- 卖出按钮
     local sellButton = ShopUtils.createButton("💰 卖出", ShopUtils.COLORS.WARNING, card, function()
-        showQuantityDialog(itemId, "sell")
+        showQuantityDialog(itemId, "sell", item)
     end)
     sellButton.Position = UDim2.new(0, 300, 0, 85)
     sellButton.Size = UDim2.new(0, 100, 0, 25)
@@ -174,8 +174,8 @@ function ShopSell.showSellItems(scrollFrame, shopData, playerData, showQuantityD
     if playerData and playerData.inventory and type(playerData.inventory) == "table" then
         for itemId, quantity in pairs(playerData.inventory) do
             if quantity > 0 then
-                -- 优先使用shopData，如果没有则使用ShopData.SHOP_ITEMS
-                local itemData = (shopData and shopData[itemId]) or (ShopData.SHOP_ITEMS and ShopData.SHOP_ITEMS[itemId])
+                -- 使用shopData中的物品数据
+                local itemData = shopData and shopData[itemId]
                 if itemData then
                     itemsToShow[itemId] = itemData
                 end

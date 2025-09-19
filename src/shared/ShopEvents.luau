@@ -31,6 +31,9 @@ ShopEvents.RemoteEvents = {
     -- 获取商店数据（包含实时库存）
     GetShopData = createRemoteEvent("GetShopData"),
 
+    -- 刷新商店数据
+    RefreshShopData = createRemoteEvent("RefreshShopData"),
+
     -- 购买物品
     PurchaseItem = createRemoteEvent("PurchaseItem"),
 

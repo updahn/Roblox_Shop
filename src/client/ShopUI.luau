@@ -10,6 +10,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 -- 等待共享模块
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
+local Config = require(SharedModules:WaitForChild("Config"))
 local ShopData = require(SharedModules:WaitForChild("ShopData"))
 local ShopEvents = require(SharedModules:WaitForChild("ShopEvents"))
 
@@ -39,9 +40,15 @@ local scrollFrame = nil
 local titleLabel = nil
 
 -- 创建数量选择对话框
-function ShopUI.showQuantityDialog(itemId, action)
-    local item = ShopData.SHOP_ITEMS[itemId]
-    if not item then return end
+function ShopUI.showQuantityDialog(itemId, action, item)
+    -- 如果没有传递item参数，尝试从shopData获取
+    if not item then
+        item = shopData and shopData[itemId]
+    end
+    if not item then
+        warn("ShopUI: 无法找到物品数据 " .. tostring(itemId))
+        return
+    end
 
     -- 创建对话框背景
     local dialogBg = Instance.new("Frame")
@@ -91,7 +98,7 @@ function ShopUI.showQuantityDialog(itemId, action)
 
     -- 商品信息
     local itemInfo = Instance.new("TextLabel")
-    itemInfo.Text = "📦 " .. item.name .. "\n💰 " .. (action == "buy" and item.price or math.floor(item.price * 0.8)) .. " 金币/个"
+    itemInfo.Text = "📦 " .. item.name .. "\n💰 " .. (action == "buy" and item.price or ShopData.calculateSellPrice(item.price)) .. " 金币/个"
     itemInfo.Font = Enum.Font.SourceSans
     itemInfo.TextSize = 16
     itemInfo.TextColor3 = ShopUtils.COLORS.TEXT_SECONDARY
@@ -162,7 +169,7 @@ function ShopUI.showQuantityDialog(itemId, action)
         currentQuantity = math.max(1, math.min(maxQuantity, newQuantity))
         quantityBox.Text = tostring(currentQuantity)
 
-        local totalPrice = currentQuantity * (action == "buy" and item.price or math.floor(item.price * 0.8))
+        local totalPrice = currentQuantity * (action == "buy" and item.price or ShopData.calculateSellPrice(item.price))
         itemInfo.Text = "📦 " .. item.name .. "\n💰 总计: " .. totalPrice .. " 金币"
     end
 
@@ -228,7 +235,9 @@ function ShopUI.updateUI()
 
     -- 更新金币显示
     if coinLabel and playerData then
-        coinLabel.Text = "💰 " .. playerData.coins .. " 金币"
+        coinLabel.Text = "💰 " .. (playerData.coins or 0) .. " 金币"
+    elseif coinLabel then
+        coinLabel.Text = "💰 连接中..."
     end
 
     -- 更新标题
@@ -244,13 +253,7 @@ function ShopUI.updateUI()
 
     -- 更新标签按钮状态
     for tabName, button in pairs(tabButtons) do
-        if tabName == currentTab then
-            button.BackgroundColor3 = ShopUtils.COLORS.ACCENT
-            button.TextColor3 = ShopUtils.COLORS.PRIMARY
-        else
-            button.BackgroundColor3 = ShopUtils.COLORS.SECONDARY
-            button.TextColor3 = ShopUtils.COLORS.TEXT_PRIMARY
-        end
+        ShopUtils.setButtonActive(button, tabName == currentTab)
     end
 
     -- 清空滚动框内容，防止界面元素混合
@@ -293,8 +296,8 @@ function ShopUI.createUI()
     -- 主框架
     mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 850, 0, 650)
-    mainFrame.Position = UDim2.new(0.5, -425, 0.5, -325)
+    mainFrame.Size = Config.UI.SIZES.MAIN_FRAME
+    mainFrame.Position = UDim2.new(0.5, -Config.UI.SIZES.MAIN_FRAME.X.Offset/2, 0.5, -Config.UI.SIZES.MAIN_FRAME.Y.Offset/2)
     mainFrame.BackgroundColor3 = ShopUtils.COLORS.PRIMARY
     mainFrame.BackgroundTransparency = 0.1
     mainFrame.BorderSizePixel = 0
@@ -352,26 +355,48 @@ function ShopUI.createUI()
     coinLabel.TextScaled = true
     coinLabel.Parent = topBar
 
-    -- 标签按钮 - 统一大小和位置
+    -- 创建按钮容器框架以确保一致的布局
+    local tabContainer = Instance.new("Frame")
+    tabContainer.Name = "TabContainer"
+    tabContainer.Size = UDim2.new(0, 320, 0, 50)
+    tabContainer.Position = UDim2.new(1, -540, 0, 20)
+    tabContainer.BackgroundTransparency = 1
+    tabContainer.Parent = topBar
+
+    -- 添加UIListLayout以确保按钮间距一致
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.FillDirection = Enum.FillDirection.Horizontal
+    listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    listLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    listLayout.Padding = UDim.new(0, 8) -- 8像素的统一间距
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Parent = tabContainer
+
+    -- 标签按钮数据 - 按正确顺序排列：购买、卖出、记录
     local tabData = {
-        {name = "buy", text = "🛒 购买", pos = UDim2.new(1, -480, 0, 25)},
-        {name = "sell", text = "💰 卖出", pos = UDim2.new(1, -380, 0, 25)},
-        {name = "records", text = "📊 记录", pos = UDim2.new(1, -280, 0, 25)}
+        {name = "buy", text = "🛒 购买", order = 1},
+        {name = "sell", text = "💰 卖出", order = 2},
+        {name = "records", text = "📊 记录", order = 3}
     }
 
     for _, tab in ipairs(tabData) do
-        local button = ShopUtils.createButton(tab.text, ShopUtils.COLORS.SECONDARY, topBar, function()
+        local button = ShopUtils.createButton(tab.text, ShopUtils.COLORS.SECONDARY, tabContainer, function()
             currentTab = tab.name
             -- 切换标签时重新获取最新数据
             ShopEvents.RemoteEvents.GetPlayerData:FireServer()
             ShopEvents.RemoteEvents.GetShopData:FireServer()
             ShopUI.updateUI()
         end)
-        button.Position = tab.pos
-        -- 统一按钮大小
-        button.Size = UDim2.new(0, 95, 0, 40)
+
+        -- 确保所有按钮完全一致的大小和样式
+        button.Size = UDim2.new(0, 100, 0, 40)
         button.TextSize = 14
         button.Font = Enum.Font.SourceSansBold
+        button.TextScaled = false
+        button.TextWrapped = false
+        button.TextTruncate = Enum.TextTruncate.None
+        button.LayoutOrder = tab.order
+
         tabButtons[tab.name] = button
     end
 
@@ -411,6 +436,9 @@ function ShopUI.openShop()
         ShopUI.createUI()
     end
 
+    -- 重新加载商品信息
+    ShopEvents.RemoteEvents.RefreshShopData:FireServer()
+
     -- 获取玩家数据
     ShopEvents.RemoteEvents.GetPlayerData:FireServer()
 
@@ -422,15 +450,15 @@ function ShopUI.openShop()
     mainFrame.BackgroundTransparency = 1
 
     local openTween = TweenService:Create(mainFrame,
-        TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, 850, 0, 650),
-        Position = UDim2.new(0.5, -425, 0.5, -325),
+        TweenInfo.new(Config.UI.ANIMATIONS.DURATION.SLOW, Config.UI.ANIMATIONS.EASING.BOUNCE, Enum.EasingDirection.Out), {
+        Size = Config.UI.SIZES.MAIN_FRAME,
+        Position = UDim2.new(0.5, -Config.UI.SIZES.MAIN_FRAME.X.Offset/2, 0.5, -Config.UI.SIZES.MAIN_FRAME.Y.Offset/2),
         BackgroundTransparency = 0
     })
 
     -- 添加旋转效果
     local rotationTween = TweenService:Create(mainFrame,
-        TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        TweenInfo.new(Config.UI.ANIMATIONS.DURATION.SLOW, Config.UI.ANIMATIONS.EASING.BOUNCE, Enum.EasingDirection.Out), {
         Rotation = 0
     })
 
@@ -449,7 +477,7 @@ function ShopUI.closeShop()
     if mainFrame then
         -- 简化的关闭动画：只缩放和淡出
         local closeTween = TweenService:Create(mainFrame,
-            TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            TweenInfo.new(Config.UI.ANIMATIONS.DURATION.NORMAL, Config.UI.ANIMATIONS.EASING.DEFAULT, Enum.EasingDirection.In), {
             Size = UDim2.new(0, 0, 0, 0),
             Position = UDim2.new(0.5, 0, 0.5, 0),
             BackgroundTransparency = 1
@@ -463,8 +491,8 @@ function ShopUI.closeShop()
 
             -- 重置主框架属性为初始状态
             mainFrame.BackgroundTransparency = 0.1
-            mainFrame.Size = UDim2.new(0, 850, 0, 650)
-            mainFrame.Position = UDim2.new(0.5, -425, 0.5, -325)
+            mainFrame.Size = Config.UI.SIZES.MAIN_FRAME
+            mainFrame.Position = UDim2.new(0.5, -Config.UI.SIZES.MAIN_FRAME.X.Offset/2, 0.5, -Config.UI.SIZES.MAIN_FRAME.Y.Offset/2)
             mainFrame.Rotation = 0
         end)
     end
@@ -476,9 +504,25 @@ end
 function ShopUI.connectEvents()
     -- 获取玩家数据响应
     ShopEvents.RemoteEvents.GetPlayerData.OnClientEvent:Connect(function(data)
-        playerData = data
-        print("✅ [数据同步] 玩家数据已更新 | 金币: " .. (data.coins or 0))
-        ShopUI.updateUI()
+        if data then
+            playerData = data
+            print("✅ [数据同步] 玩家数据已更新 | 金币: " .. (data.coins or 0))
+            ShopUI.updateUI()
+        else
+            warn("⚠️ [数据同步] 玩家数据为空，可能存在网络连接问题")
+            -- 设置默认数据防止空指针错误
+            playerData = {
+                coins = 0,
+                inventory = {},
+                stats = {
+                    totalPurchases = 0,
+                    totalSales = 0,
+                    totalSpent = 0,
+                    totalEarned = 0
+                }
+            }
+            ShopUI.updateUI()
+        end
     end)
 
     -- 获取商店数据响应
@@ -498,6 +542,8 @@ function ShopUI.connectEvents()
     ShopEvents.RemoteEvents.PurchaseItem.OnClientEvent:Connect(function(success, message, newData)
         if success then
             playerData = newData
+            -- 刷新商店数据
+            ShopEvents.RemoteEvents.RefreshShopData:FireServer()
             ShopUI.updateUI()
             ShopUtils.showNotification("✅ " .. message, true, screenGui)
         else
@@ -509,6 +555,8 @@ function ShopUI.connectEvents()
     ShopEvents.RemoteEvents.SellItem.OnClientEvent:Connect(function(success, message, newData)
         if success then
             playerData = newData
+            -- 刷新商店数据
+            ShopEvents.RemoteEvents.RefreshShopData:FireServer()
             ShopUI.updateUI()
             ShopUtils.showNotification("✅ " .. message, true, screenGui)
         else
@@ -550,6 +598,10 @@ end
 -- 初始化
 function ShopUI.init()
     ShopUI.connectEvents()
+
+    -- 获取系统配置（包括sell_rate）
+    ShopData.getSystemConfig()
+    print("📡 [客户端] 正在获取系统配置...")
 
     -- 请求玩家数据
     if ShopEvents.RemoteEvents.GetPlayerData then

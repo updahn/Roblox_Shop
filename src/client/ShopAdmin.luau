@@ -1,16 +1,28 @@
 -- 商店管理员界面模块
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- 等待共享模块
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
+local Config = require(SharedModules:WaitForChild("Config"))
 local ShopEvents = require(SharedModules:WaitForChild("ShopEvents"))
 local ShopUtils = require(script.Parent:WaitForChild("ShopUtils"))
+
+local player = Players.LocalPlayer
 
 local ShopAdmin = {}
 
 -- 显示管理员面板
 function ShopAdmin.showAdminPanel(screenGui, showNotification)
+    -- 检查管理员权限
+    if not Config.isValidAdmin(player) then
+        if showNotification then
+            showNotification("❌ 您没有管理员权限", false)
+        end
+        return
+    end
+
     -- 创建管理员面板
     local adminFrame = Instance.new("Frame")
     adminFrame.Name = "AdminPanel"
@@ -87,15 +99,28 @@ function ShopAdmin.showAdminPanel(screenGui, showNotification)
 
     -- 监听服务器响应
     local connection
-    connection = ShopEvents.RemoteEvents.GetAllPlayersData.OnClientEvent:Connect(function(allPlayersData)
+    connection = ShopEvents.RemoteEvents.GetAllPlayersData.OnClientEvent:Connect(function(allPlayersData, errorMsg)
         connection:Disconnect()
         loadingLabel:Destroy()
-        ShopAdmin.displayAllPlayersData(contentArea, allPlayersData, showNotification)
+
+        if errorMsg then
+            -- 显示错误信息
+            showNotification("❌ " .. errorMsg)
+        elseif allPlayersData then
+            ShopAdmin.displayAllPlayersData(contentArea, allPlayersData, showNotification)
+        else
+            showNotification("❌ 无法加载玩家数据")
+        end
     end)
 end
 
 -- 显示所有玩家数据
 function ShopAdmin.displayAllPlayersData(parentFrame, allPlayersData, showNotification)
+    -- 检查管理员权限
+    if not Config.isValidAdmin(player) then
+        return
+    end
+
     local yPos = 10
 
     for playerName, data in pairs(allPlayersData) do
@@ -192,6 +217,11 @@ end
 
 -- 显示其他玩家的购买记录
 function ShopAdmin.showPlayerRecords(playerName, records, screenGui)
+    -- 检查管理员权限
+    if not Config.isValidAdmin(player) then
+        return
+    end
+
     -- 创建记录查看窗口
     local recordFrame = Instance.new("Frame")
     recordFrame.Name = "PlayerRecordFrame"
@@ -267,7 +297,7 @@ function ShopAdmin.showPlayerRecords(playerName, records, screenGui)
 
             -- 时间戳
             local timeLabel = Instance.new("TextLabel")
-            timeLabel.Text = record.timestamp or "未知时间"
+            timeLabel.Text = ShopUtils.formatTimestamp(record.timestamp)
             timeLabel.Font = Enum.Font.SourceSans
             timeLabel.TextSize = 11
             timeLabel.TextColor3 = ShopUtils.COLORS.TEXT_MUTED
@@ -285,7 +315,7 @@ function ShopAdmin.showPlayerRecords(playerName, records, screenGui)
             elseif record.action == "sell" then
                 actionText = "💰 卖出 " .. (record.itemName or "未知物品") .. " x" .. (record.quantity or 1)
             elseif record.action == "admin_edit" then
-                actionText = "👑 " .. (record.itemName or "管理员操作")
+                actionText = "修改 管理员金币调整x" .. (record.quantity or 1)
             end
             actionLabel.Text = actionText
             actionLabel.Font = Enum.Font.SourceSansBold
@@ -308,14 +338,8 @@ function ShopAdmin.showPlayerRecords(playerName, records, screenGui)
                 amountText = "+" .. (record.totalEarned or 0) .. " 金币"
                 amountColor = ShopUtils.COLORS.SUCCESS
             elseif record.action == "admin_edit" then
-                local change = record.quantity or 0
-                if change >= 0 then
-                    amountText = "+" .. change .. " 金币"
-                    amountColor = ShopUtils.COLORS.SUCCESS
-                else
-                    amountText = tostring(change) .. " 金币"
-                    amountColor = ShopUtils.COLORS.ERROR
-                end
+                amountText = "now" .. (record.balanceAfter or 0) .. "金币"
+                amountColor = ShopUtils.COLORS.TEXT_PRIMARY
             end
             amountLabel.Text = amountText
             amountLabel.Font = Enum.Font.SourceSansBold

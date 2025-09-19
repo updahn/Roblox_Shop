@@ -35,7 +35,8 @@ local function copyModule(moduleName)
     end
 end
 
--- 复制所需的模块
+-- 复制所需的模块 - 优先加载配置模块
+copyModule("Config")
 copyModule("ShopData")
 copyModule("ShopEvents")
 

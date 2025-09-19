@@ -126,7 +126,7 @@ function ShopBuy.createItemCard(item, itemId, shopData, playerData, showQuantity
 
     -- 购买按钮
     local buyButton = ShopUtils.createButton("🛒 购买", ShopUtils.COLORS.SUCCESS, card, function()
-        showQuantityDialog(itemId, "buy")
+        showQuantityDialog(itemId, "buy", item)
     end)
     buyButton.Position = UDim2.new(0, 300, 0, 85)
     buyButton.Size = UDim2.new(0, 100, 0, 25)
@@ -178,7 +178,7 @@ function ShopBuy.showBuyItems(scrollFrame, shopData, playerData, showQuantityDia
     end
 
     local yPos = 0
-    local itemsToShow = shopData or ShopData.SHOP_ITEMS or {}
+    local itemsToShow = shopData or {}
 
     if itemsToShow and type(itemsToShow) == "table" then
         for itemId, item in pairs(itemsToShow) do

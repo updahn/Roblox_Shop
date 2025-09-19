@@ -1,11 +1,15 @@
 -- 商店记录界面模块
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- 等待共享模块
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
+local Config = require(SharedModules:WaitForChild("Config"))
 local ShopEvents = require(SharedModules:WaitForChild("ShopEvents"))
 local ShopUtils = require(script.Parent:WaitForChild("ShopUtils"))
+
+local player = Players.LocalPlayer
 
 local ShopRecords = {}
 
@@ -42,13 +46,15 @@ function ShopRecords.showPurchaseRecords(scrollFrame, playerData, showAdminPanel
     titleText.TextXAlignment = Enum.TextXAlignment.Center
     titleText.Parent = titleFrame
 
-    -- 管理员控制按钮
-    local adminButton = ShopUtils.createButton("👑 管理", ShopUtils.COLORS.WARNING, titleFrame, function()
-        showAdminPanel()
-    end)
-    adminButton.Position = UDim2.new(1, -100, 0, 5)
-    adminButton.Size = UDim2.new(0, 90, 0, 30)
-    adminButton.TextSize = 12
+    -- 管理员控制按钮（仅管理员可见）
+    if Config.isValidAdmin(player) and showAdminPanel then
+        local adminButton = ShopUtils.createButton("👑 管理", ShopUtils.COLORS.WARNING, titleFrame, function()
+            showAdminPanel()
+        end)
+        adminButton.Position = UDim2.new(1, -100, 0, 5)
+        adminButton.Size = UDim2.new(0, 90, 0, 30)
+        adminButton.TextSize = 12
+    end
 
     yPos = yPos + 60
 
@@ -66,7 +72,7 @@ function ShopRecords.showPurchaseRecords(scrollFrame, playerData, showAdminPanel
 
             -- 时间戳
             local timeLabel = Instance.new("TextLabel")
-            timeLabel.Text = record.timestamp or "未知时间"
+            timeLabel.Text = ShopUtils.formatTimestamp(record.timestamp)
             timeLabel.Font = Enum.Font.SourceSans
             timeLabel.TextSize = 12
             timeLabel.TextColor3 = ShopUtils.COLORS.TEXT_MUTED
@@ -83,6 +89,8 @@ function ShopRecords.showPurchaseRecords(scrollFrame, playerData, showAdminPanel
                 actionText = "🛒 购买 " .. (record.itemName or "未知物品") .. " x" .. (record.quantity or 1)
             elseif record.action == "sell" then
                 actionText = "💰 卖出 " .. (record.itemName or "未知物品") .. " x" .. (record.quantity or 1)
+            elseif record.action == "admin_edit" then
+                actionText = "修改 管理员金币调整x" .. (record.quantity or 1)
             end
             actionLabel.Text = actionText
             actionLabel.Font = Enum.Font.SourceSansBold
@@ -104,6 +112,9 @@ function ShopRecords.showPurchaseRecords(scrollFrame, playerData, showAdminPanel
             elseif record.action == "sell" then
                 amountText = "+" .. (record.totalEarned or 0) .. " 金币"
                 amountColor = ShopUtils.COLORS.SUCCESS
+            elseif record.action == "admin_edit" then
+                amountText = "now" .. (record.balanceAfter or 0) .. "金币"
+                amountColor = ShopUtils.COLORS.TEXT_PRIMARY
             end
             amountLabel.Text = amountText
             amountLabel.Font = Enum.Font.SourceSansBold
