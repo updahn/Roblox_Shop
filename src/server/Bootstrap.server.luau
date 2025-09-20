@@ -11,29 +11,12 @@ end
 -- 等待一帧，确保模块已创建
 game:GetService("RunService").Heartbeat:Wait()
 
--- 第二步: 启动数据管理器
-spawn(function()
-    local dataManager = script.Parent:FindFirstChild("DataManager")
-    if dataManager then
-        require(dataManager)
-    end
-end)
-
--- 第三步: 启动管理员服务
-spawn(function()
-    local adminService = script.Parent:FindFirstChild("AdminService")
-    if adminService then
-        require(adminService)
-    end
-end)
-
--- 第四步: 启动主服务端逻辑（注意文件扩展名）
-spawn(function()
-    wait(0.1) -- 短暂延迟确保一切就绪
-    local mainScript = script.Parent:FindFirstChild("init.server")
-    if mainScript then
-        require(mainScript)
-    end
-end)
+-- 第二步: 检查主服务端脚本是否存在
+local mainScript = script.Parent:FindFirstChild("Main")
+if mainScript then
+    print("✅ 找到Main服务器脚本，将自动执行")
+else
+    warn("⚠️ 找不到Main脚本")
+end
 
 print("商店系统启动完成")

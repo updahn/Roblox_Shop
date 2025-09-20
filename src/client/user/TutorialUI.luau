@@ -67,13 +67,14 @@ local function createTutorialGUI()
     tutorialGui.Parent = playerGui
 
     -- 背景遮罩
-    local overlay = Instance.new("Frame")
+    local overlay = Instance.new("TextButton")
     overlay.Name = "Overlay"
     overlay.Size = UDim2.new(1, 0, 1, 0)
-    overlay.Position = UDim2.new(0, 0, 0, 0)
     overlay.BackgroundColor3 = Color3.new(0, 0, 0)
-    overlay.BackgroundTransparency = 0.5
+    overlay.BackgroundTransparency = 0.3
     overlay.BorderSizePixel = 0
+    overlay.Text = ""
+    overlay.AutoButtonColor = false
     overlay.Parent = tutorialGui
 
     -- 主面板
@@ -183,6 +184,11 @@ local function createTutorialGUI()
     end)
 
     closeButton.MouseButton1Click:Connect(function()
+        hideTutorial()
+    end)
+
+    -- 背景遮罩点击关闭
+    overlay.MouseButton1Click:Connect(function()
         hideTutorial()
     end)
 

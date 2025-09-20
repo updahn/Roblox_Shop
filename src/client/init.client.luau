@@ -38,8 +38,8 @@ local function initializeClient()
     require(ReplicatedStorage.SharedModules.ShopEvents)
 
     -- 导入商店UI
-    local ShopUI = require(script:WaitForChild("ShopUI"))
-    local TutorialUI = require(script:WaitForChild("TutorialUI"))
+    local ShopUI = require(script.user:WaitForChild("ShopUI"))
+    local TutorialUI = require(script.user:WaitForChild("TutorialUI"))
 
     -- 初始化商店UI
     ShopUI.init()

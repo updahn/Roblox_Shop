@@ -1,4 +1,4 @@
--- 商店购买界面模块
+-- 商店卖出界面模块
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -7,12 +7,12 @@ local TweenService = game:GetService("TweenService")
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
 local ShopData = require(SharedModules:WaitForChild("ShopData"))
 local ShopEvents = require(SharedModules:WaitForChild("ShopEvents"))
-local ShopUtils = require(script.Parent:WaitForChild("ShopUtils"))
+local ShopUtils = require(script.Parent.Parent:WaitForChild("ShopUtils"))
 
-local ShopBuy = {}
+local ShopSell = {}
 
--- 创建商品卡片（购买模式）
-function ShopBuy.createItemCard(item, itemId, shopData, playerData, showQuantityDialog)
+-- 创建商品卡片（卖出模式）
+function ShopSell.createItemCard(item, itemId, shopData, playerData, showQuantityDialog)
     local card = Instance.new("Frame")
     card.Name = itemId .. "Card"
     card.Size = UDim2.new(1, -50, 0, 120)
@@ -110,11 +110,12 @@ function ShopBuy.createItemCard(item, itemId, shopData, playerData, showQuantity
     descLabel.TextTruncate = Enum.TextTruncate.AtEnd
     descLabel.Parent = card
 
-    -- 价格标签
+    -- 卖出价格标签
+    local sellPrice = math.floor(item.price * 0.8) -- 使用默认sell rate
     local priceLabel = Instance.new("TextLabel")
     priceLabel.Name = "PriceLabel"
-    priceLabel.Text = "💰 " .. item.price .. " 金币"
-    priceLabel.TextColor3 = ShopUtils.COLORS.WARNING
+    priceLabel.Text = "💰 " .. sellPrice .. " 金币"
+    priceLabel.TextColor3 = ShopUtils.COLORS.SUCCESS
     priceLabel.Font = Enum.Font.GothamBold
     priceLabel.TextSize = 16
     priceLabel.Size = UDim2.new(0, 150, 0, 20)
@@ -124,14 +125,14 @@ function ShopBuy.createItemCard(item, itemId, shopData, playerData, showQuantity
     priceLabel.TextTruncate = Enum.TextTruncate.AtEnd
     priceLabel.Parent = card
 
-    -- 购买按钮
-    local buyButton = ShopUtils.createButton("🛒 购买", ShopUtils.COLORS.SUCCESS, card, function()
-        showQuantityDialog(itemId, "buy", item)
+    -- 卖出按钮
+    local sellButton = ShopUtils.createButton("💰 卖出", ShopUtils.COLORS.WARNING, card, function()
+        showQuantityDialog(itemId, "sell", item)
     end)
-    buyButton.Position = UDim2.new(0, 300, 0, 85)
-    buyButton.Size = UDim2.new(0, 100, 0, 25)
+    sellButton.Position = UDim2.new(0, 300, 0, 85)
+    sellButton.Size = UDim2.new(0, 100, 0, 25)
 
-    -- 库存显示
+    -- 拥有数量显示
     local stockLabel = Instance.new("TextLabel")
     stockLabel.Name = "StockLabel"
     stockLabel.Font = Enum.Font.Gotham
@@ -144,30 +145,29 @@ function ShopBuy.createItemCard(item, itemId, shopData, playerData, showQuantity
     stockLabel.TextTruncate = Enum.TextTruncate.AtEnd
     stockLabel.Parent = card
 
-    -- 使用从服务器获取的实时库存数据
-    local stock = nil
-    if shopData and shopData[itemId] and shopData[itemId].currentStock ~= nil then
-        stock = shopData[itemId].currentStock
-    elseif item.maxQuantity ~= nil then
-        stock = item.maxQuantity
-    end
+    local playerQuantity = (playerData and playerData.inventory[itemId]) or 0
+    stockLabel.Text = "拥有: " .. playerQuantity
 
-    if stock == nil or stock == -1 then
-        stockLabel.Text = "库存: ∞"
-    else
-        stockLabel.Text = "库存: " .. stock
-        if stock <= 0 then
-            buyButton.BackgroundColor3 = ShopUtils.COLORS.TEXT_MUTED
-            buyButton.Text = "缺货"
-            buyButton.Active = false
-        end
+    -- 检查是否可以卖出
+    local canSell = true -- 默认允许卖出，具体逻辑由服务器端控制
+
+    if playerQuantity <= 0 then
+        sellButton.BackgroundColor3 = ShopUtils.COLORS.TEXT_MUTED
+        sellButton.Text = "无物品"
+        sellButton.Active = false
+    elseif not canSell then
+        sellButton.BackgroundColor3 = ShopUtils.COLORS.TEXT_MUTED
+        sellButton.Text = "无法出售"
+        sellButton.Active = false
+        stockLabel.Text = stockLabel.Text .. "\n(特殊物品)"
+        stockLabel.TextWrapped = true
     end
 
     return card
 end
 
--- 显示购买商品列表
-function ShopBuy.showBuyItems(scrollFrame, shopData, playerData, showQuantityDialog)
+-- 显示卖出商品列表
+function ShopSell.showSellItems(scrollFrame, shopData, playerData, showQuantityDialog)
     if not scrollFrame then return end
 
     -- 清空现有内容
@@ -178,11 +178,24 @@ function ShopBuy.showBuyItems(scrollFrame, shopData, playerData, showQuantityDia
     end
 
     local yPos = 0
-    local itemsToShow = shopData or {}
+    local itemsToShow = {}
+
+    -- 只显示玩家拥有的物品
+    if playerData and playerData.inventory and type(playerData.inventory) == "table" then
+        for itemId, quantity in pairs(playerData.inventory) do
+            if quantity > 0 then
+                -- 使用shopData中的物品数据
+                local itemData = shopData and shopData[itemId]
+                if itemData then
+                    itemsToShow[itemId] = itemData
+                end
+            end
+        end
+    end
 
     if itemsToShow and type(itemsToShow) == "table" then
         for itemId, item in pairs(itemsToShow) do
-            local card = ShopBuy.createItemCard(item, itemId, shopData, playerData, showQuantityDialog)
+            local card = ShopSell.createItemCard(item, itemId, shopData, playerData, showQuantityDialog)
             card.Position = UDim2.new(0, 20, 0, yPos + 20)
             card.Parent = scrollFrame
             yPos = yPos + 140
@@ -192,4 +205,4 @@ function ShopBuy.showBuyItems(scrollFrame, shopData, playerData, showQuantityDia
     scrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPos + 40)
 end
 
-return ShopBuy
+return ShopSell

@@ -9,6 +9,8 @@
 const jwt = require('jsonwebtoken');
 const { AppError } = require('./errorHandler');
 const database = require('../config/database');
+const AdminSQLOperations = require('../services/adminSQLOperations');
+const UserSQLOperations = require('../services/userSQLOperations');
 
 /**
  * JWT Token认证中间件
@@ -37,8 +39,13 @@ const authenticateToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // 验证 JWT payload 中的 userId 字段
+    if (!decoded.userId || decoded.userId === undefined || decoded.userId === null) {
+      throw new AppError('Token中缺少用户ID', 401);
+    }
+
     // 检查用户是否存在
-    const user = await database.getUserDetails(decoded.userId);
+    const user = await UserSQLOperations.getUserDetails(decoded.userId);
     if (!user) {
       throw new AppError('用户不存在', 404);
     }
@@ -78,8 +85,9 @@ const authenticateToken = async (req, res, next) => {
  */
 const isUserAdmin = async (userId, username) => {
   try {
-    const SQLOperations = require('../services/sqlOperations');
-    return await SQLOperations.isUserAdmin(userId, username);
+    const user = await AdminSQLOperations.checkUserExists(userId, true);
+    // checkUserExists已经转换is_admin为布尔值，直接使用即可
+    return user ? user.is_admin : false;
   } catch (error) {
     console.error('检查管理员权限时发生错误:', error);
     return false;
@@ -142,7 +150,13 @@ const optionalAuth = async (req, res, next) => {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await database.getUserDetails(decoded.userId);
+
+      // 验证 JWT payload 中的 userId 字段
+      if (!decoded.userId || decoded.userId === undefined || decoded.userId === null) {
+        return next(); // 可选认证中，token无效时静默忽略
+      }
+
+      const user = await UserSQLOperations.getUserDetails(decoded.userId);
 
       if (user) {
         req.user = {

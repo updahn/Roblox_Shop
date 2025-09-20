@@ -1,0 +1,83 @@
+-- 商店系统事件定义 - 简化版本
+-- 分离普通用户和管理员事件
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Events = {}
+
+-- 创建事件文件夹
+local eventsFolder = ReplicatedStorage:FindFirstChild("ShopEvents")
+if not eventsFolder then
+    eventsFolder = Instance.new("Folder")
+    eventsFolder.Name = "ShopEvents"
+    eventsFolder.Parent = ReplicatedStorage
+end
+
+-- 创建远程事件的辅助函数
+local function createRemoteEvent(name)
+    local event = eventsFolder:FindFirstChild(name)
+    if not event then
+        event = Instance.new("RemoteEvent")
+        event.Name = name
+        event.Parent = eventsFolder
+    end
+    return event
+end
+
+-- 创建远程函数的辅助函数
+local function createRemoteFunction(name)
+    local func = eventsFolder:FindFirstChild(name)
+    if not func then
+        func = Instance.new("RemoteFunction")
+        func.Name = name
+        func.Parent = eventsFolder
+    end
+    return func
+end
+
+-- ==============================================
+-- 普通用户事件
+-- ==============================================
+Events.User = {
+    -- 数据相关
+    GetPlayerData = createRemoteEvent("GetPlayerData"),
+    GetShopData = createRemoteEvent("GetShopData"),
+    GetTransactions = createRemoteEvent("GetTransactions"),
+
+    -- 交易相关
+    BuyItem = createRemoteEvent("BuyItem"),
+    SellItem = createRemoteEvent("SellItem"),
+
+    -- 通用功能
+    RefreshData = createRemoteEvent("RefreshData"),
+}
+
+-- ==============================================
+-- 管理员事件
+-- ==============================================
+Events.Admin = {
+    -- 用户管理
+    GetAllUsers = createRemoteEvent("AdminGetAllUsers"),
+    SetUserCoins = createRemoteEvent("AdminSetUserCoins"),
+    GetUserHistory = createRemoteEvent("AdminGetUserHistory"),
+
+    -- 会员管理
+    GetMembersList = createRemoteEvent("AdminGetMembersList"),
+    GetAllUsersWithMembership = createRemoteEvent("AdminGetAllUsersWithMembership"),
+    GetMembershipStatus = createRemoteEvent("AdminGetMembershipStatus"),
+    UpdateMembership = createRemoteEvent("AdminUpdateMembership"),
+    AddMembership = createRemoteEvent("AdminAddMembership"),
+    CancelMembership = createRemoteEvent("AdminCancelMembership"),
+    ExtendMembership = createRemoteEvent("AdminExtendMembership"),
+    BatchMembershipOp = createRemoteEvent("AdminBatchMembershipOp"),
+    ManageUserMembership = createRemoteEvent("AdminManageUserMembership"),
+
+    -- 权限检查
+    CheckPermission = createRemoteFunction("AdminCheckPermission"),
+}
+
+-- 删除了向后兼容代码 - 使用新的分离式事件结构
+
+print("📡 商店事件系统已初始化 (简化版)")
+
+return Events

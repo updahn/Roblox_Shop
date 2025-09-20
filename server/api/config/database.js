@@ -124,11 +124,49 @@ class Database {
 
   // 执行查询
   async query(sql, params = []) {
+    let sanitizedParams = [];
     try {
-      const [rows, fields] = await this.pool.execute(sql, params);
+      // 验证和转换参数
+      sanitizedParams = params.map((param, index) => {
+        // 将 undefined 转换为 null
+        if (param === undefined) {
+          return null;
+        }
+
+        // 将 null 保持为 null
+        if (param === null) {
+          return null;
+        }
+
+        // 检查 NaN 值
+        if (typeof param === 'number' && isNaN(param)) {
+          throw new Error(`参数 ${index} 是 NaN，无法执行 SQL 查询`);
+        }
+
+        // 处理布尔值
+        if (typeof param === 'boolean') {
+          return param ? 1 : 0;
+        }
+
+        // 确保数字类型参数是有效的
+        if (typeof param === 'number') {
+          return param;
+        }
+
+        // 字符串参数直接返回，不做自动转换
+        return param;
+      });
+
+      const [rows, fields] = await this.pool.execute(sql, sanitizedParams);
       return { rows, fields };
     } catch (error) {
-      logger.error('数据库查询错误:', { sql, params, error: error.message });
+      logger.error('数据库查询错误:', {
+        sql,
+        originalParams: params,
+        sanitizedParams: sanitizedParams,
+        error: error.message,
+        stack: error.stack,
+      });
       throw error;
     }
   }
@@ -184,133 +222,32 @@ class Database {
     await this.pool.end();
     logger.info('数据库连接池已关闭');
   }
-
-  // 用户相关操作 - 使用SQLOperations统一管理
-  async createUser(userId, username, displayName = null) {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const result = await SQLOperations.createUser(userId, username, displayName);
-      logger.info(`用户创建或更新成功: ${userId}`);
-      return result;
-    } catch (error) {
-      logger.error(`创建用户失败: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // 获取用户详细信息
-  async getUserDetails(userId) {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const user = await SQLOperations.getUserDetails(userId);
-      return user;
-    } catch (error) {
-      logger.error(`获取用户详细信息失败: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // 获取用户库存
-  async getUserInventory(userId) {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const inventory = await SQLOperations.getUserInventory(userId);
-      return inventory;
-    } catch (error) {
-      logger.error(`获取用户库存失败: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // 获取所有商品
-  async getAllItems() {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const items = await SQLOperations.getAllItems();
-      return items;
-    } catch (error) {
-      logger.error(`获取商品列表失败: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // 购买物品
-  async buyItem(userId, itemId, quantity) {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const result = await SQLOperations.buyItem(userId, itemId, quantity);
-      logger.info(`用户 ${userId} 购买物品成功: ${itemId} x${quantity}`);
-      return result;
-    } catch (error) {
-      logger.warn(`用户 ${userId} 购买物品失败: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // 出售物品
-  async sellItem(userId, itemId, quantity) {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const result = await SQLOperations.sellItem(userId, itemId, quantity);
-      logger.info(`用户 ${userId} 出售物品成功: ${itemId} x${quantity}`);
-      return result;
-    } catch (error) {
-      logger.warn(`用户 ${userId} 出售物品失败: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // 获取用户交易记录
-  async getUserTransactions(userId, limit = 50, offset = 0) {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const transactions = await SQLOperations.getUserTransactions(userId, limit);
-      return transactions;
-    } catch (error) {
-      logger.error(`获取用户交易记录失败: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // 获取交易统计
-  async getTransactionStats(days = 7) {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const stats = await SQLOperations.getTransactionStatsForDays(days);
-      return stats;
-    } catch (error) {
-      logger.error(`获取交易统计失败: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // 管理员：获取所有用户
-  async getAllUsers(limit = 100, offset = 0) {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const users = await SQLOperations.getUsersWithPagination({ limit, offset });
-      return users;
-    } catch (error) {
-      logger.error(`获取用户列表失败: ${error.message}`);
-      throw error;
-    }
-  }
-
-  // 管理员：修改用户金币
-  async updateUserCoins(userId, newAmount, reason = '管理员调整') {
-    const SQLOperations = require('../services/sqlOperations');
-    try {
-      const result = await SQLOperations.adminUpdateUserCoins(userId, newAmount, reason);
-      logger.info(`管理员调整用户 ${userId} 金币: ${result.oldCoins} -> ${result.newCoins}, 原因: ${reason}`);
-      return result;
-    } catch (error) {
-      logger.error(`管理员调整用户金币失败: ${error.message}`);
-      throw error;
-    }
-  }
 }
 
 // 创建数据库实例
 const database = new Database();
 
-module.exports = database;
+// 确保方法正确绑定
+const query = database.query.bind(database);
+const transaction = database.transaction.bind(database);
+const testConnection = database.testConnection.bind(database);
+const initialize = database.initialize.bind(database);
+const getConnection = database.getConnection.bind(database);
+const beginTransaction = database.beginTransaction.bind(database);
+const commitTransaction = database.commitTransaction.bind(database);
+const rollbackTransaction = database.rollbackTransaction.bind(database);
+const close = database.close.bind(database);
+
+// 导出绑定好方法的对象
+module.exports = {
+  query,
+  transaction,
+  testConnection,
+  initialize,
+  getConnection,
+  beginTransaction,
+  commitTransaction,
+  rollbackTransaction,
+  close,
+  pool: database.pool,
+};

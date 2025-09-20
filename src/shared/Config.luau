@@ -45,7 +45,6 @@ Config.API = {
         AUTH = "/auth",
         USERS = "/users",
         ITEMS = "/items",
-        TRANSACTIONS = "/transactions",
         ADMIN = "/admin"
     }
 }
@@ -56,9 +55,6 @@ Config.API = {
 -- ==============================================
 
 Config.ADMIN = {
-    -- 动态获取的管理员配置 (从API加载)
-    USERNAMES = {},
-
     -- 权限级别配置
     PERMISSIONS = {
         MANAGE_USERS = true,
@@ -106,6 +102,7 @@ Config.UI = {
         SUCCESS = Color3.fromRGB(52, 211, 153),     -- 现代绿色
         WARNING = Color3.fromRGB(251, 191, 36),     -- 现代黄色
         ERROR = Color3.fromRGB(248, 113, 113),      -- 现代红色
+        DANGER = Color3.fromRGB(239, 68, 68),       -- 危险红色
 
         -- 文字颜色
         TEXT_PRIMARY = Color3.fromRGB(248, 250, 252),    -- 纯白
@@ -212,22 +209,9 @@ Config.DEBUG = {
 
 -- ==============================================
 -- 本地化配置
--- 支持多语言和货币格式设置
 -- ==============================================
 
 Config.LOCALIZATION = {
-    -- 默认语言
-    DEFAULT_LANGUAGE = "zh-CN",
-
-    -- 支持的语言列表
-    SUPPORTED_LANGUAGES = {
-        "zh-CN", -- 简体中文
-        "zh-TW", -- 繁体中文
-        "en-US", -- 英语
-        "ja-JP", -- 日语
-        "ko-KR"  -- 韩语
-    },
-
     -- 货币显示格式
     CURRENCY_FORMAT = {
         SYMBOL = "💰",
@@ -236,35 +220,16 @@ Config.LOCALIZATION = {
     }
 }
 
--- ==============================================
--- 安全配置
--- API请求验证、速率限制和数据校验参数
--- ==============================================
-
-Config.SECURITY = {
-    -- API请求安全
-    ENABLE_REQUEST_VALIDATION = true,
-    MAX_REQUEST_SIZE = 1048576, -- 1MB
-
-    -- 速率限制
-    RATE_LIMITING = {
-        ENABLED = true,
-        MAX_REQUESTS_PER_MINUTE = 60,
-        COOLDOWN_PERIOD = 1000 -- 毫秒
-    },
-
-    -- 数据验证
-    INPUT_VALIDATION = {
-        MAX_STRING_LENGTH = 1000,
-        ALLOWED_CHARACTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-",
-        SANITIZE_HTML = true
-    }
-}
+-- 删除了未使用的安全配置 - 由后端API处理
 
 -- ==============================================
 -- 工具函数
 -- 提供各种帮助函数用于配置管理和数据处理
 -- ==============================================
+
+-- 管理员验证缓存
+local adminValidationCache = {}
+local ADMIN_CACHE_DURATION = 30
 
 -- 获取完整的API URL
 function Config.getApiUrl(endpoint)
@@ -276,12 +241,7 @@ function Config.isDebugMode()
     return Config.DEBUG.ENABLED
 end
 
--- 获取本地化文本（预留接口）
-function Config.getText(key, language)
-    language = language or Config.LOCALIZATION.DEFAULT_LANGUAGE
-    -- TODO: 实现本地化文本获取逻辑
-    return key
-end
+-- 删除了本地化文本函数 - 现在使用中文
 
 --[[
 从API加载管理员配置
@@ -301,7 +261,6 @@ function Config.loadAdminConfig()
     if success and result.success then
         local adminConfig = result.data.admin
         if adminConfig then
-            Config.ADMIN.USERNAMES = adminConfig.usernames or {}
             Config.ADMIN._LOADED = true
             Config.ADMIN._LAST_UPDATE = tick()
 
@@ -407,51 +366,65 @@ function Config.ensureAdminConfigLoaded()
 end
 
 --[[
-验证管理员权限
-
-检查指定玩家是否具有管理员权限。
-在客户端通过RemoteFunction向服务器查询，在服务器端直接检查本地缓存。
-
-@param player Player - 要检查的玩家对象
-@return boolean - 是否为管理员
+客户端管理员权限验证函数
+通过 RemoteFunction 向服务器查询权限，带缓存机制
 --]]
 function Config.isValidAdmin(player)
     local RunService = game:GetService("RunService")
 
     if RunService:IsServer() then
-        -- 服务器端：确保配置已加载并直接检查
-        if not Config.ensureAdminConfigLoaded() then
-            Config.log("WARN", "无法加载管理员配置")
+        -- 服务器端直接返回false，应该使用 AdminService.isValidAdmin
+        warn("在服务器端调用 Config.isValidAdmin，请使用 AdminService.isValidAdmin")
+        return false
+    else
+        local cacheKey = player.Name
+        local currentTime = tick()
+
+        -- 检查缓存
+        if adminValidationCache[cacheKey] then
+            local cacheData = adminValidationCache[cacheKey]
+            if (currentTime - cacheData.timestamp) < ADMIN_CACHE_DURATION then
+                -- 缓存还有效，直接返回缓存结果
+                return cacheData.isAdmin
+            end
+        end
+
+        -- 客户端通过 RemoteFunction 查询
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+        print("🔍 [Config] 客户端权限检查:", player.Name)
+
+        local success, Events = pcall(function()
+            return require(ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("ShopEvents"))
+        end)
+
+        if not success or not Events then
+            print("❌ [Config] 无法加载Events模块")
             return false
         end
 
-        -- 检查用户名
-        for _, adminName in pairs(Config.ADMIN.USERNAMES) do
-            if player.Name == adminName then
-                return true
-            end
+        local checkAdminRemote = Events.Admin and Events.Admin.CheckPermission
+        if not checkAdminRemote then
+            print("❌ [Config] 找不到权限检查RemoteFunction")
+            return false
         end
-        return false
-    else
-        -- 客户端：通过RemoteFunction向服务器查询
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local checkAdminRemote = ReplicatedStorage:WaitForChild("CheckAdminPermission", 5)
 
-        if checkAdminRemote then
-            local success, isAdmin = pcall(function()
-                return checkAdminRemote:InvokeServer()
-            end)
+        local success, result = pcall(function()
+            return checkAdminRemote:InvokeServer()
+        end)
 
-            if success then
-                return isAdmin
-            else
-                Config.log("ERROR", "查询管理员权限失败", {error = isAdmin})
-            end
+        if success then
+            -- 缓存结果
+            adminValidationCache[cacheKey] = {
+                isAdmin = result,
+                timestamp = currentTime
+            }
+            print("✅ [Config] 权限检查完成:", player.Name, "->", result)
+            return result
         else
-            Config.log("ERROR", "找不到管理员权限查询服务")
+            print("❌ [Config] 权限检查失败:", player.Name, "错误:", result)
+            return false
         end
-
-        return false
     end
 end
 
@@ -480,6 +453,27 @@ function Config.formatCurrency(amount)
 
     return symbol .. " " .. formatted
 end
+
+--[[
+强制刷新管理员权限缓存
+用于实现实时更新管理员权限判断
+
+@param player Player - 要刷新权限的玩家
+--]]
+function Config.refreshAdminCache(player)
+    if player and player.Name then
+        local cacheKey = player.Name
+        -- 清除缓存
+        adminValidationCache[cacheKey] = nil
+        print("🔄 [调试] 已清除", player.Name, "的管理员权限缓存")
+    else
+        -- 清除所有缓存
+        adminValidationCache = {}
+        print("🔄 [调试] 已清除所有管理员权限缓存")
+    end
+end
+
+-- 删除了本地管理员管理函数 - 使用API验证
 
 --[[
 统一日志记录函数

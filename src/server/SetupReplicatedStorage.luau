@@ -22,12 +22,14 @@ if not sharedFolder then
 end
 
 -- 从Rojo的Shared文件夹复制模块到SharedModules
-local function copyModule(moduleName)
+local function copyModule(moduleName, targetName)
+    targetName = targetName or moduleName -- 如果没有指定目标名称，使用原名称
     local sourceModule = sharedFolderRojo:WaitForChild(moduleName, 5)
     if sourceModule then
-        local targetModule = sharedFolder:FindFirstChild(moduleName)
+        local targetModule = sharedFolder:FindFirstChild(targetName)
         if not targetModule then
             targetModule = sourceModule:Clone()
+            targetModule.Name = targetName
             targetModule.Parent = sharedFolder
         end
     else
@@ -37,8 +39,9 @@ end
 
 -- 复制所需的模块 - 优先加载配置模块
 copyModule("Config")
+copyModule("Events", "ShopEvents") -- Events模块以ShopEvents名称复制，保持向后兼容
 copyModule("ShopData")
-copyModule("ShopEvents")
+copyModule("ShopDataClient")
 
 
 -- 返回true表示成功

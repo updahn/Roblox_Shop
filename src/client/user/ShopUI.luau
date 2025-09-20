@@ -15,11 +15,11 @@ local ShopData = require(SharedModules:WaitForChild("ShopData"))
 local ShopEvents = require(SharedModules:WaitForChild("ShopEvents"))
 
 -- 导入拆分的模块
-local ShopUtils = require(script.Parent:WaitForChild("ShopUtils"))
+local ShopUtils = require(script.Parent.Parent:WaitForChild("ShopUtils"))
 local ShopBuy = require(script.Parent:WaitForChild("ShopBuy"))
 local ShopSell = require(script.Parent:WaitForChild("ShopSell"))
 local ShopRecords = require(script.Parent:WaitForChild("ShopRecords"))
-local ShopAdmin = require(script.Parent:WaitForChild("ShopAdmin"))
+local ShopAdminRecords = require(script.Parent.Parent.admin:WaitForChild("ShopAdminRecords"))
 
 local ShopUI = {}
 ShopUI.__index = ShopUI
@@ -28,16 +28,23 @@ ShopUI.__index = ShopUI
 local currentTab = "buy" -- "buy", "sell", "records"
 local playerData = nil
 local shopData = nil -- 存储从服务器获取的商店数据（包含实时库存）
+local lastAdminStatus = false -- 记录上次的管理员状态，用于检测变化
 local isShopOpen = false
 
 -- UI元素
 local screenGui = nil
 local mainFrame = nil
 local coinLabel = nil
+local membershipLabel = nil
 local tabButtons = {}
 local contentFrame = nil
 local scrollFrame = nil
 local titleLabel = nil
+local membershipData = nil
+
+-- 事件连接管理
+local eventConnections = {}
+local eventsConnected = false
 
 -- 创建数量选择对话框
 function ShopUI.showQuantityDialog(itemId, action, item)
@@ -98,7 +105,8 @@ function ShopUI.showQuantityDialog(itemId, action, item)
 
     -- 商品信息
     local itemInfo = Instance.new("TextLabel")
-    itemInfo.Text = "📦 " .. item.name .. "\n💰 " .. (action == "buy" and item.price or ShopData.calculateSellPrice(item.price)) .. " 金币/个"
+    local sellPrice = math.floor(item.price * 0.8) -- 使用默认sell rate
+    itemInfo.Text = "📦 " .. item.name .. "\n💰 " .. (action == "buy" and item.price or sellPrice) .. " 金币/个"
     itemInfo.Font = Enum.Font.SourceSans
     itemInfo.TextSize = 16
     itemInfo.TextColor3 = ShopUtils.COLORS.TEXT_SECONDARY
@@ -169,7 +177,8 @@ function ShopUI.showQuantityDialog(itemId, action, item)
         currentQuantity = math.max(1, math.min(maxQuantity, newQuantity))
         quantityBox.Text = tostring(currentQuantity)
 
-        local totalPrice = currentQuantity * (action == "buy" and item.price or ShopData.calculateSellPrice(item.price))
+        local sellPrice = math.floor(item.price * 0.8) -- 使用默认sell rate
+        local totalPrice = currentQuantity * (action == "buy" and item.price or sellPrice)
         itemInfo.Text = "📦 " .. item.name .. "\n💰 总计: " .. totalPrice .. " 金币"
     end
 
@@ -197,9 +206,9 @@ function ShopUI.showQuantityDialog(itemId, action, item)
     -- 确认按钮
     local confirmButton = ShopUtils.createButton("✓ 确认", ShopUtils.COLORS.SUCCESS, buttonFrame, function()
         if action == "buy" then
-            ShopEvents.RemoteEvents.PurchaseItem:FireServer(itemId, currentQuantity)
+            ShopEvents.User.BuyItem:FireServer(itemId, currentQuantity)
         else
-            ShopEvents.RemoteEvents.SellItem:FireServer(itemId, currentQuantity)
+            ShopEvents.User.SellItem:FireServer(itemId, currentQuantity)
         end
 
         dialogBg:Destroy()
@@ -229,15 +238,82 @@ function ShopUI.showQuantityDialog(itemId, action, item)
     updateQuantity(1)
 end
 
+-- 更新会员状态数据
+function ShopUI.updateMembershipStatus()
+    if not playerData then return end
+
+    -- 直接从playerData中获取会员状态信息
+    if playerData.membership then
+        membershipData = playerData.membership
+        print("✅ [会员状态] 已更新会员信息:", membershipData.hasMembership and "有会员" or "无会员", membershipData.daysRemaining and ("剩余" .. membershipData.daysRemaining .. "天") or "")
+    else
+        membershipData = {
+            hasMembership = false,
+            isValid = false,
+            daysRemaining = 0,
+            membershipType = nil
+        }
+        print("ℹ️ [会员状态] 用户无会员状态")
+    end
+
+    -- 立即更新UI显示
+    ShopUI.updateUI()
+end
+
+-- 上次检查管理员状态的时间
+local lastAdminCheckTime = 0
+local ADMIN_CHECK_INTERVAL = 30 -- 30秒检查一次
+
+-- 检查管理员状态变化并更新UI（优化版）
+local function checkAdminStatusChange()
+    local currentTime = tick()
+
+    -- 如果距离上次检查时间小于间隔，跳过检查
+    if (currentTime - lastAdminCheckTime) < ADMIN_CHECK_INTERVAL then
+        return false
+    end
+
+    lastAdminCheckTime = currentTime
+    local currentAdminStatus = Config.isValidAdmin(player)
+
+    if currentAdminStatus ~= lastAdminStatus then
+        print("🔄 [调试] 管理员状态发生变化:", lastAdminStatus, "→", currentAdminStatus)
+        lastAdminStatus = currentAdminStatus
+
+        -- 清空管理员权限缓存，强制重新检查
+        Config.refreshAdminCache(player)
+
+        return true
+    end
+    return false
+end
+
 -- 更新UI显示
 function ShopUI.updateUI()
     if not screenGui or not mainFrame then return end
+
+    -- 检查管理员状态是否变化
+    local adminStatusChanged = checkAdminStatusChange()
 
     -- 更新金币显示
     if coinLabel and playerData then
         coinLabel.Text = "💰 " .. (playerData.coins or 0) .. " 金币"
     elseif coinLabel then
         coinLabel.Text = "💰 连接中..."
+    end
+
+    -- 更新会员状态显示
+    if membershipLabel then
+        if membershipData and membershipData.hasMembership and membershipData.isValid then
+            local daysRemaining = membershipData.daysRemaining or 0
+            membershipLabel.Text = "👑 会员剩余: " .. daysRemaining .. "天"
+            membershipLabel.TextColor3 = ShopUtils.COLORS.SUCCESS
+            membershipLabel.Visible = true
+        else
+            membershipLabel.Text = "普通用户"
+            membershipLabel.TextColor3 = ShopUtils.COLORS.TEXT_SECONDARY
+            membershipLabel.Visible = true
+        end
     end
 
     -- 更新标题
@@ -271,11 +347,26 @@ function ShopUI.updateUI()
     elseif currentTab == "sell" then
         ShopSell.showSellItems(scrollFrame, shopData, playerData, ShopUI.showQuantityDialog)
     elseif currentTab == "records" then
+        -- 如果管理员状态发生变化，强制刷新记录页面
+        if adminStatusChanged then
+            print("🔄 [调试] 由于管理员状态变化，强制刷新记录页面")
+        end
+
+        -- 总是先调用 showPurchaseRecords 来设置界面，然后处理数据
         ShopRecords.showPurchaseRecords(scrollFrame, playerData, function()
-            ShopAdmin.showAdminPanel(screenGui, function(message, isSuccess)
+            ShopAdminRecords.showAdminPanel(screenGui, function(message, isSuccess)
                 ShopUtils.showNotification(message, isSuccess, screenGui)
             end)
         end)
+
+        -- 如果已有交易记录数据，使用已有数据（避免重复请求）
+        if playerData and playerData.transactionHistory then
+            print("📊 [交易记录] 使用已有数据显示记录，避免重复请求")
+            ShopRecords.handleTransactionResponse(true, nil, {
+                transactions = playerData.transactionHistory,
+                stats = playerData.transactionStats
+            })
+        end
     end
 end
 
@@ -355,6 +446,32 @@ function ShopUI.createUI()
     coinLabel.TextScaled = true
     coinLabel.Parent = topBar
 
+    -- 会员状态显示
+    membershipLabel = Instance.new("TextLabel")
+    membershipLabel.Name = "MembershipLabel"
+    membershipLabel.Text = "检查会员状态中..."
+    membershipLabel.Font = Enum.Font.Gotham
+    membershipLabel.TextSize = 12
+    membershipLabel.TextColor3 = ShopUtils.COLORS.TEXT_SECONDARY
+    membershipLabel.Size = UDim2.new(0, 150, 0, 18)
+    membershipLabel.Position = UDim2.new(1, -210, 0, 40)
+    membershipLabel.BackgroundTransparency = 1
+    membershipLabel.TextXAlignment = Enum.TextXAlignment.Right
+    membershipLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    membershipLabel.TextScaled = true
+    membershipLabel.Parent = topBar
+
+
+    -- 每日奖励按钮
+    local rewardButton = ShopUtils.createButton("🎁 领取奖励", ShopUtils.COLORS.SUCCESS, topBar, function()
+        ShopUI.claimDailyRewards()
+    end)
+    rewardButton.Name = "RewardButton"
+    rewardButton.Size = UDim2.new(0, 90, 0, 25)
+    rewardButton.Position = UDim2.new(1, -210, 0, 55)
+    rewardButton.TextSize = 12
+    rewardButton.Visible = false
+
     -- 创建按钮容器框架以确保一致的布局
     local tabContainer = Instance.new("Frame")
     tabContainer.Name = "TabContainer"
@@ -383,8 +500,8 @@ function ShopUI.createUI()
         local button = ShopUtils.createButton(tab.text, ShopUtils.COLORS.SECONDARY, tabContainer, function()
             currentTab = tab.name
             -- 切换标签时重新获取最新数据
-            ShopEvents.RemoteEvents.GetPlayerData:FireServer()
-            ShopEvents.RemoteEvents.GetShopData:FireServer()
+            ShopEvents.User.GetPlayerData:FireServer()
+            ShopEvents.User.GetShopData:FireServer()
             ShopUI.updateUI()
         end)
 
@@ -437,10 +554,13 @@ function ShopUI.openShop()
     end
 
     -- 重新加载商品信息
-    ShopEvents.RemoteEvents.RefreshShopData:FireServer()
+    ShopEvents.User.RefreshData:FireServer()
 
     -- 获取玩家数据
-    ShopEvents.RemoteEvents.GetPlayerData:FireServer()
+    ShopEvents.User.GetPlayerData:FireServer()
+
+    -- 更新会员状态
+    ShopUI.updateMembershipStatus()
 
     mainFrame.Visible = true
 
@@ -500,13 +620,68 @@ function ShopUI.closeShop()
     ShopUtils.SOUNDS.click:Play()
 end
 
+-- 领取每日奖励
+function ShopUI.claimDailyRewards()
+    if not playerData or not playerData.id then
+        ShopUtils.showNotification("❌ 玩家数据未加载", false, screenGui)
+        return
+    end
+
+    local success, message, rewardData = nil, nil, nil
+    local callSuccess, callResult = pcall(function()
+        return false, "功能暂时不可用"
+    end)
+
+    if callSuccess then
+        success, message, rewardData = callResult
+    else
+        success = false
+        message = "认证失败，请重新进入游戏或检查网络连接"
+    end
+
+    if success then
+        if rewardData and rewardData.totalRewards > 0 then
+            ShopUtils.showNotification("✅ " .. message .. " 获得 " .. rewardData.totalRewards .. " 金币", true, screenGui)
+            -- 刷新玩家数据
+            ShopEvents.User.GetPlayerData:FireServer()
+        else
+            ShopUtils.showNotification("ℹ️ 今日奖励已领取完毕", true, screenGui)
+        end
+    else
+        ShopUtils.showNotification("❌ " .. (message or "领取失败"), false, screenGui)
+    end
+end
+
+-- 断开所有事件连接
+function ShopUI.disconnectEvents()
+    for _, connection in pairs(eventConnections) do
+        if connection then
+            connection:Disconnect()
+        end
+    end
+    eventConnections = {}
+    eventsConnected = false
+    print("🔌 [事件管理] 已断开所有事件连接")
+end
+
 -- 事件连接
 function ShopUI.connectEvents()
+    -- 如果已经连接过事件，先断开旧连接
+    if eventsConnected then
+        print("🔄 [事件管理] 检测到重复连接，正在清理旧连接...")
+        ShopUI.disconnectEvents()
+    end
+
     -- 获取玩家数据响应
-    ShopEvents.RemoteEvents.GetPlayerData.OnClientEvent:Connect(function(data)
+    eventConnections.getPlayerData = ShopEvents.User.GetPlayerData.OnClientEvent:Connect(function(data)
         if data then
             playerData = data
             print("✅ [数据同步] 玩家数据已更新 | 金币: " .. (data.coins or 0))
+
+            -- 更新会员状态
+            ShopUI.updateMembershipStatus()
+
+            -- 更新UI
             ShopUI.updateUI()
         else
             warn("⚠️ [数据同步] 玩家数据为空，可能存在网络连接问题")
@@ -514,6 +689,12 @@ function ShopUI.connectEvents()
             playerData = {
                 coins = 0,
                 inventory = {},
+                membership = {
+                    hasMembership = false,
+                    isValid = false,
+                    daysRemaining = 0,
+                    membershipType = nil
+                },
                 stats = {
                     totalPurchases = 0,
                     totalSales = 0,
@@ -521,12 +702,13 @@ function ShopUI.connectEvents()
                     totalEarned = 0
                 }
             }
+            ShopUI.updateMembershipStatus()
             ShopUI.updateUI()
         end
     end)
 
     -- 获取商店数据响应
-    ShopEvents.RemoteEvents.GetShopData.OnClientEvent:Connect(function(data)
+    eventConnections.getShopData = ShopEvents.User.GetShopData.OnClientEvent:Connect(function(data)
         shopData = data
         local itemCount = 0
         if data then
@@ -539,33 +721,44 @@ function ShopUI.connectEvents()
     end)
 
     -- 购买响应
-    ShopEvents.RemoteEvents.PurchaseItem.OnClientEvent:Connect(function(success, message, newData)
+    eventConnections.buyItem = ShopEvents.User.BuyItem.OnClientEvent:Connect(function(success, message, newData)
         if success then
             playerData = newData
+
+            -- 立即更新会员状态（特别是购买会员商品后）
+            ShopUI.updateMembershipStatus()
+
             -- 刷新商店数据
-            ShopEvents.RemoteEvents.RefreshShopData:FireServer()
+            ShopEvents.User.RefreshData:FireServer()
             ShopUI.updateUI()
+
             ShopUtils.showNotification("✅ " .. message, true, screenGui)
+
+            -- 实时刷新交易记录
+            ShopRecords.forceRefreshTransactions()
         else
             ShopUtils.showNotification("❌ " .. message, false, screenGui)
         end
     end)
 
     -- 卖出响应
-    ShopEvents.RemoteEvents.SellItem.OnClientEvent:Connect(function(success, message, newData)
+    eventConnections.sellItem = ShopEvents.User.SellItem.OnClientEvent:Connect(function(success, message, newData)
         if success then
             playerData = newData
             -- 刷新商店数据
-            ShopEvents.RemoteEvents.RefreshShopData:FireServer()
+            ShopEvents.User.RefreshData:FireServer()
             ShopUI.updateUI()
             ShopUtils.showNotification("✅ " .. message, true, screenGui)
+
+            -- 实时刷新交易记录
+            ShopRecords.forceRefreshTransactions()
         else
             ShopUtils.showNotification("❌ " .. message, false, screenGui)
         end
     end)
 
     -- 管理员功能响应
-    ShopEvents.RemoteEvents.SetPlayerCoins.OnClientEvent:Connect(function(success, message)
+    eventConnections.setPlayerCoins = ShopEvents.Admin.SetUserCoins.OnClientEvent:Connect(function(success, message)
         if success then
             ShopUtils.showNotification("✅ " .. message, true, screenGui)
         else
@@ -573,16 +766,51 @@ function ShopUI.connectEvents()
         end
     end)
 
-    ShopEvents.RemoteEvents.GetPlayerPurchaseHistory.OnClientEvent:Connect(function(playerName, records, errorMsg)
-        if errorMsg then
+    eventConnections.getPlayerPurchaseHistory = ShopEvents.Admin.GetUserHistory.OnClientEvent:Connect(function(success, message, data)
+        print("📊 [ShopUI] GetUserHistory事件响应:", success, message, data and "有数据" or "无数据")
+
+        if not success then
+            -- 当失败时，message 包含错误信息
+            local errorMsg = message or "获取用户历史记录失败"
             ShopUtils.showNotification("❌ " .. errorMsg, false, screenGui)
-        elseif records then
-            ShopAdmin.showPlayerRecords(playerName, records, screenGui)
+            ShopRecords.handleAdminHistoryResponse(success, errorMsg, nil)
+        elseif data then
+            -- 当成功时，使用统一的处理函数
+            ShopRecords.handleAdminHistoryResponse(success, message, data)
+        end
+    end)
+
+    -- 用户交易记录响应
+    eventConnections.getTransactions = ShopEvents.User.GetTransactions.OnClientEvent:Connect(function(success, errorMsg, responseData)
+        print("📊 [交易记录] 事件响应:", success, errorMsg, responseData and "有数据" or "无数据")
+
+        if success and responseData then
+            -- 更新 playerData 以包含交易记录
+            if playerData then
+                playerData.transactionHistory = responseData.transactions
+                playerData.transactionStats = responseData.stats
+
+                print("📊 [交易记录] 已获取 " .. #responseData.transactions .. " 条交易记录")
+
+                -- 通知ShopRecords模块更新UI
+                ShopRecords.handleTransactionResponse(success, errorMsg, responseData)
+
+                -- 刷新其他UI显示
+                ShopUI.updateUI()
+            end
+        else
+            local error = errorMsg or "获取交易记录失败"
+            print("❌ [交易记录] 失败:", error)
+
+            -- 通知ShopRecords模块显示错误
+            ShopRecords.handleTransactionResponse(success, error, responseData)
+
+            ShopUtils.showNotification("❌ " .. tostring(error), false, screenGui)
         end
     end)
 
     -- 键盘输入
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    eventConnections.keyboardInput = UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
 
         if input.KeyCode == Enum.KeyCode.E then
@@ -593,6 +821,10 @@ function ShopUI.connectEvents()
             end
         end
     end)
+
+    -- 标记事件已连接
+    eventsConnected = true
+    print("🔗 [事件管理] 所有事件已成功连接")
 end
 
 -- 初始化
@@ -600,20 +832,20 @@ function ShopUI.init()
     ShopUI.connectEvents()
 
     -- 获取系统配置（包括sell_rate）
-    ShopData.getSystemConfig()
+    -- 系统配置将由服务器端管理
     print("📡 [客户端] 正在获取系统配置...")
 
     -- 请求玩家数据
-    if ShopEvents.RemoteEvents.GetPlayerData then
-        ShopEvents.RemoteEvents.GetPlayerData:FireServer()
+    if ShopEvents.User.GetPlayerData then
+        ShopEvents.User.GetPlayerData:FireServer()
         print("📡 [客户端] 正在同步玩家数据...")
     else
         warn("⚠️ GetPlayerData 远程事件未找到")
     end
 
     -- 请求商店数据
-    if ShopEvents.RemoteEvents.GetShopData then
-        ShopEvents.RemoteEvents.GetShopData:FireServer()
+    if ShopEvents.User.GetShopData then
+        ShopEvents.User.GetShopData:FireServer()
         print("📡 [客户端] 正在同步商店数据...")
     else
         warn("⚠️ GetShopData 远程事件未找到")

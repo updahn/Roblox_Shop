@@ -9,14 +9,14 @@ require('dotenv').config();
 const logger = require('./utils/logger');
 const database = require('./config/database');
 const { errorHandler } = require('./middleware/errorHandler');
-const SQLOperations = require('./services/sqlOperations');
+const UserSQLOperations = require('./services/userSQLOperations');
+const AdminSQLOperations = require('./services/adminSQLOperations');
 
 // 路由模块
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
-const itemRoutes = require('./routes/items');
-const transactionRoutes = require('./routes/transactions');
 const adminRoutes = require('./routes/admin');
+const itemRoutes = require('./routes/items');
 
 const app = express();
 const PORT = process.env.API_SERVER_PORT || 3001;
@@ -47,8 +47,8 @@ app.use(morgan('combined', { stream: { write: (message) => logger.info(message.t
 // 动态请求限制配置
 async function createDynamicRateLimiter() {
   try {
-    const windowMs = (await SQLOperations.getSystemConfig('rate_limit_window_ms')) || 15 * 60 * 1000;
-    const maxRequests = (await SQLOperations.getSystemConfig('rate_limit_max_requests')) || 100;
+    const windowMs = (await AdminSQLOperations.getSystemConfig('rate_limit_window_ms')) || 15 * 60 * 1000;
+    const maxRequests = (await AdminSQLOperations.getSystemConfig('rate_limit_max_requests')) || 100;
 
     return rateLimit({
       windowMs: parseInt(windowMs),
@@ -94,15 +94,14 @@ app.get('/health', (req, res) => {
 // API 路由
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/items', itemRoutes);
-app.use('/api/transactions', transactionRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/items', itemRoutes);
 
 // 配置信息API (供Roblox Studio获取系统配置)
 app.get('/api/config', async (req, res) => {
   try {
-    const config = await SQLOperations.getSystemConfigAll();
-    const adminUsernames = await SQLOperations.getAdminUsernames();
+    const config = await AdminSQLOperations.getAllSystemConfig();
+    const adminUsernames = await AdminSQLOperations.getAdminList();
 
     const adminConfig = {
       usernames: adminUsernames,
@@ -136,8 +135,6 @@ app.get('/', (req, res) => {
       health: '/health',
       auth: '/api/auth',
       users: '/api/users',
-      items: '/api/items',
-      transactions: '/api/transactions',
       admin: '/api/admin',
     },
   });
@@ -184,7 +181,7 @@ async function initializeAdminUsers() {
     for (const username of adminUsernames) {
       try {
         // 检查用户是否存在
-        const user = await SQLOperations.getUserByUsername(username);
+        const user = await AdminSQLOperations.getUserByUsername(username);
 
         if (!user) {
           logger.warn(`管理员用户 ${username} 不存在，将在用户首次登录时自动设置为管理员`);
@@ -193,7 +190,7 @@ async function initializeAdminUsers() {
 
         if (!user.is_admin) {
           // 将用户设置为管理员
-          await SQLOperations.setAdminByUsername(username);
+          await AdminSQLOperations.promoteToAdmin(user.id);
           logger.info(`用户 ${username} 已设置为管理员`);
         } else {
           logger.info(`用户 ${username} 已经是管理员`);
