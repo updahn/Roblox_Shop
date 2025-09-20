@@ -1,10 +1,33 @@
 /**
- * 认证中间件模块
+ * 认证与授权中间件模块
  *
- * 提供JWT token验证和管理员权限检查功能。
- * 支持多层级的权限管理：
- * 1. 数据库is_admin字段（最高优先级）
- * 2. 环境变量中的管理员列表
+ * 提供完整的身份认证和权限管理功能，确保API安全访问：
+ *
+ * 核心功能：
+ * - JWT Token验证和解析
+ * - 用户身份认证检查
+ * - 管理员权限验证
+ * - 可选认证支持
+ * - Token刷新和续期
+ *
+ * 安全特性：
+ * - 防止JWT伪造和篡改
+ * - 支持Token过期检查
+ * - 用户状态实时验证
+ * - 多层级权限管理
+ * - 详细的安全审计日志
+ *
+ * 权限层次：
+ * 1. 数据库is_admin字段（最高优先级，动态更新）
+ * 2. 环境变量ADMIN_USERNAMES（静态配置，启动时加载）
+ *
+ * 使用场景：
+ * - authenticateToken: 需要用户登录的API
+ * - authenticateAdmin: 需要管理员权限的API
+ * - optionalAuth: 可选登录的API（如公开商品列表）
+ *
+ * @author Shop System Team
+ * @version 1.0.0
  */
 const jwt = require('jsonwebtoken');
 const { AppError } = require('./errorHandler');

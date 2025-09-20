@@ -1,15 +1,33 @@
 /**
  * 数据库连接配置模块
  *
- * 使用MySQL2库创建连接池，支持Promise和连接池管理。
- * 自动检测运行环境并选择合适的数据库主机地址。
+ * 功能特性：
+ * - 使用MySQL2库创建连接池，支持Promise和高并发
+ * - 自动检测运行环境并选择合适的数据库主机地址
+ * - 内置连接池管理和错误处理机制
+ * - 支持事务处理和参数验证
+ * - 提供连接健康检查和监控功能
  *
- * 环境变量：
- * - MYSQL_HOST: 数据库主机地址
- * - MYSQL_PORT: 数据库端口
- * - MYSQL_USER: 数据库用户名
- * - MYSQL_PASSWORD: 数据库密码
- * - MYSQL_DATABASE: 数据库名
+ * 环境变量配置：
+ * - MYSQL_HOST: 数据库主机地址（默认：localhost）
+ * - MYSQL_PORT: 数据库端口（默认：3306）
+ * - MYSQL_USER: 数据库用户名（默认：shop_user）
+ * - MYSQL_PASSWORD: 数据库密码（默认：shop_password_2024!）
+ * - MYSQL_DATABASE: 数据库名（默认：shop_system）
+ *
+ * 使用示例：
+ * ```javascript
+ * const { query, transaction } = require('./config/database');
+ *
+ * // 简单查询
+ * const { rows } = await query('SELECT * FROM users WHERE id = ?', [userId]);
+ *
+ * // 事务处理
+ * await transaction(async (connection) => {
+ *   await connection.execute('UPDATE users SET coins = coins - ?', [amount]);
+ *   await connection.execute('INSERT INTO transactions ...', [...]);
+ * });
+ * ```
  */
 const mysql = require('mysql2/promise');
 const logger = require('../utils/logger');
@@ -79,13 +97,28 @@ pool.on('error', function (err) {
   }
 });
 
-// 数据库操作封装类
+/**
+ * 数据库操作封装类
+ *
+ * 提供完整的数据库操作接口，包括：
+ * - 连接管理和健康检查
+ * - 参数化查询和防SQL注入
+ * - 事务支持和错误处理
+ * - 自动重连和故障恢复
+ */
 class Database {
   constructor() {
     this.pool = pool;
   }
 
-  // 测试连接
+  /**
+   * 测试数据库连接
+   *
+   * 通过ping命令检查数据库连接状态，确保服务可用性
+   *
+   * @returns {Promise<boolean>} 连接成功返回true
+   * @throws {Error} 连接失败时抛出错误
+   */
   async testConnection() {
     try {
       const connection = await this.pool.getConnection();
@@ -122,50 +155,81 @@ class Database {
     }
   }
 
-  // 执行查询
+  /**
+   * 执行SQL查询
+   *
+   * 执行参数化查询，提供自动参数验证和类型转换。
+   * 所有查询都使用prepared statements防止SQL注入攻击。
+   *
+   * @param {string} sql - SQL查询语句，使用?作为参数占位符
+   * @param {Array} params - 查询参数数组，可选，默认为空数组
+   * @returns {Promise<{rows: Array, fields: Array}>} 查询结果对象，包含行数据和字段信息
+   * @throws {Error} 查询失败时抛出错误，包含详细的错误信息
+   *
+   * @example
+   * // 简单查询
+   * const { rows } = await query('SELECT * FROM users WHERE id = ?', [123]);
+   *
+   * // 插入数据
+   * const { rows } = await query(
+   *   'INSERT INTO users (id, username) VALUES (?, ?)',
+   *   [userId, username]
+   * );
+   *
+   * // 复杂查询
+   * const { rows } = await query(`
+   *   SELECT u.*, COUNT(t.id) as transaction_count
+   *   FROM users u
+   *   LEFT JOIN transactions t ON u.id = t.user_id
+   *   WHERE u.status = ? AND u.created_at > ?
+   *   GROUP BY u.id
+   * `, ['active', '2024-01-01']);
+   */
   async query(sql, params = []) {
     let sanitizedParams = [];
     try {
-      // 验证和转换参数
+      // 验证和转换参数，确保类型安全
       sanitizedParams = params.map((param, index) => {
-        // 将 undefined 转换为 null
+        // 将 undefined 转换为 null（数据库兼容）
         if (param === undefined) {
           return null;
         }
 
-        // 将 null 保持为 null
+        // 保持 null 值
         if (param === null) {
           return null;
         }
 
-        // 检查 NaN 值
+        // 检查和拒绝 NaN 值，防止数据损坏
         if (typeof param === 'number' && isNaN(param)) {
-          throw new Error(`参数 ${index} 是 NaN，无法执行 SQL 查询`);
+          throw new Error(`参数索引 ${index} 包含 NaN 值，这会导致数据库错误`);
         }
 
-        // 处理布尔值
+        // 将布尔值转换为数字（MySQL兼容）
         if (typeof param === 'boolean') {
           return param ? 1 : 0;
         }
 
-        // 确保数字类型参数是有效的
-        if (typeof param === 'number') {
+        // 数字和字符串直接返回
+        if (typeof param === 'number' || typeof param === 'string') {
           return param;
         }
 
-        // 字符串参数直接返回，不做自动转换
-        return param;
+        // 其他类型转换为字符串
+        return String(param);
       });
 
       const [rows, fields] = await this.pool.execute(sql, sanitizedParams);
       return { rows, fields };
     } catch (error) {
-      logger.error('数据库查询错误:', {
-        sql,
+      logger.error('数据库查询执行失败:', {
+        sql: sql.substring(0, 200) + (sql.length > 200 ? '...' : ''), // 限制日志长度
         originalParams: params,
         sanitizedParams: sanitizedParams,
         error: error.message,
-        stack: error.stack,
+        errorCode: error.code,
+        sqlState: error.sqlState,
+        stack: error.stack?.substring(0, 500), // 限制堆栈信息长度
       });
       throw error;
     }
@@ -181,20 +245,62 @@ class Database {
     }
   }
 
-  // 执行事务
+  /**
+   * 执行数据库事务
+   *
+   * 提供事务支持，确保一组操作的原子性。
+   * 自动处理事务的开始、提交和回滚，包括错误情况下的清理。
+   *
+   * @param {Function} callback - 事务回调函数，接收connection参数
+   * @returns {Promise<*>} 回调函数的返回值
+   * @throws {Error} 事务失败时抛出错误
+   *
+   * @example
+   * // 转账操作示例
+   * const result = await transaction(async (connection) => {
+   *   // 扣除发送方金币
+   *   await connection.execute(
+   *     'UPDATE users SET coins = coins - ? WHERE id = ?',
+   *     [amount, senderId]
+   *   );
+   *
+   *   // 增加接收方金币
+   *   await connection.execute(
+   *     'UPDATE users SET coins = coins + ? WHERE id = ?',
+   *     [amount, receiverId]
+   *   );
+   *
+   *   // 记录交易
+   *   const [result] = await connection.execute(
+   *     'INSERT INTO transactions (...) VALUES (...)',
+   *     [...]
+   *   );
+   *
+   *   return result.insertId;
+   * });
+   */
   async transaction(callback) {
     const connection = await this.getConnection();
     try {
       await connection.beginTransaction();
+      logger.debug('事务开始');
+
       const result = await callback(connection);
+
       await connection.commit();
+      logger.debug('事务提交成功');
+
       return result;
     } catch (error) {
       await connection.rollback();
-      logger.error('事务执行失败:', error.message);
+      logger.error('事务执行失败，已回滚:', {
+        error: error.message,
+        stack: error.stack?.substring(0, 300),
+      });
       throw error;
     } finally {
       connection.release();
+      logger.debug('数据库连接已释放');
     }
   }
 
