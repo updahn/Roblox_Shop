@@ -40,12 +40,16 @@ local function initializeClient()
     -- 导入商店UI
     local ShopUI = require(script.user:WaitForChild("ShopUI"))
     local TutorialUI = require(script.user:WaitForChild("TutorialUI"))
+    local DroneManager = require(script.user:WaitForChild("DroneManager"))
 
     -- 初始化商店UI
     ShopUI.init()
 
     -- 初始化教程UI（不启用键盘监听）
     TutorialUI.initialize()
+
+    -- 初始化无人机管理器
+    DroneManager.init()
 
     -- 统一键盘输入处理
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -65,6 +69,9 @@ local function initializeClient()
     print("✅ 商店系统已就绪！")
     print("⌨️  按 E 键打开/关闭商店")
     print("⌨️  按 H 键打开/关闭帮助")
+    print("🤖 按 B 键召唤无人机")
+    print("🤖 按 N 键收回无人机")
+    print("🤖 按 M 键切换无人机模式")
 end
 
 -- 启动客户端

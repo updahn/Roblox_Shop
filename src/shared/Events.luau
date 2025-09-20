@@ -76,6 +76,38 @@ Events.Admin = {
     CheckPermission = createRemoteFunction("AdminCheckPermission"),
 }
 
+-- ==============================================
+-- 无人机事件
+-- ==============================================
+Events.Drone = {
+    -- 无人机控制
+    SpawnDrone = createRemoteEvent("SpawnDrone"),
+    RecallDrone = createRemoteEvent("RecallDrone"),
+    SwitchDroneMode = createRemoteEvent("SwitchDroneMode"),
+
+    -- 客户端回调事件
+    DroneSpawned = createRemoteEvent("DroneSpawned"),
+    DroneRecalled = createRemoteEvent("DroneRecalled"),
+    DroneModeChanged = createRemoteEvent("DroneModeChanged"),
+    DroneDestroyed = createRemoteEvent("DroneDestroyed"),
+    DroneAttack = createRemoteEvent("DroneAttack"),
+}
+
+-- ==============================================
+-- 靶子系统事件
+-- ==============================================
+Events.Target = {
+    -- 靶子状态事件
+    TargetCreated = createRemoteEvent("TargetCreated"),
+    TargetDestroyed = createRemoteEvent("TargetDestroyed"),
+    TargetDamaged = createRemoteEvent("TargetDamaged"),
+    TargetRespawned = createRemoteEvent("TargetRespawned"),
+
+    -- 靶子信息请求
+    RequestTargetStatus = createRemoteEvent("RequestTargetStatus"),
+    TargetStatusUpdate = createRemoteEvent("TargetStatusUpdate"),
+}
+
 -- 删除了向后兼容代码 - 使用新的分离式事件结构
 
 print("📡 商店事件系统已初始化 (简化版)")

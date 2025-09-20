@@ -40,6 +40,8 @@ end
 -- 复制所需的模块 - 优先加载配置模块
 copyModule("Config")
 copyModule("Events", "ShopEvents") -- Events模块以ShopEvents名称复制，保持向后兼容
+copyModule("Events") -- 为无人机系统保留原名
+copyModule("DroneConfig") -- 无人机系统配置
 copyModule("ShopData")
 copyModule("ShopDataClient")
 

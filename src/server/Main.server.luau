@@ -21,10 +21,17 @@ local Events = require(SharedModules:WaitForChild("ShopEvents"))
 local ModulesFolder = script.Parent:WaitForChild("modules")
 local UserService = require(ModulesFolder:WaitForChild("UserService"))
 local AdminService = require(ModulesFolder:WaitForChild("AdminService"))
+local DroneService = require(ModulesFolder:WaitForChild("DroneService"))
+local TargetService = require(ModulesFolder:WaitForChild("TargetService"))
+
+-- 初始化靶子系统
+TargetService.initialize()
 
 print("✅ 商店系统已启动")
 print("🌐 API服务器: " .. Config.API.BASE_URL)
 print("🛒 支持普通用户和管理员功能")
+print("🤖 无人机系统已激活")
+print("🎯 靶子系统已激活")
 print("📊 数据存储在MySQL数据库中")
 
 -- 处理玩家连接事件
