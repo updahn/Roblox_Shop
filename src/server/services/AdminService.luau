@@ -447,7 +447,7 @@ local function handleManageUserMembership(player: Player, requestData)
                     local UserService = require(script.Parent:WaitForChild("UserService"))
                     spawn(function()
                         -- 先清除目标用户的会员缓存
-                        local UserDataService = require(script.Parent:WaitForChild("UserDataService"))
+                        local UserDataService = require(script.Parent.Parent.data:WaitForChild("UserDataService"))
                         if UserDataService.clearMembershipCache then
                             UserDataService.clearMembershipCache(tostring(targetPlayer.UserId))
                             print("🧹 [实时更新] 已清除", targetPlayerName, "的会员缓存")

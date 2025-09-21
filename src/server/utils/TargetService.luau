@@ -8,8 +8,11 @@ local RunService = game:GetService("RunService")
 
 -- 等待共享模块
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
-local DroneConfig = require(SharedModules:WaitForChild("DroneConfig"))
+local Config = require(SharedModules:WaitForChild("Config"))
 local Events = require(SharedModules:WaitForChild("ShopEvents"))
+
+-- 使用统一的配置
+local DroneConfig = Config.DRONE_CONFIG
 
 local TargetService = {}
 
@@ -34,8 +37,8 @@ function TargetService.createTarget(position)
     local targetData = {
         id = targetId,
         position = position,
-        health = DroneConfig.TARGETS.MAX_HEALTH,
-        maxHealth = DroneConfig.TARGETS.MAX_HEALTH,
+        health = Config.TARGETS.MAX_HEALTH,
+        maxHealth = Config.TARGETS.MAX_HEALTH,
         alive = true,
         respawnTime = 0,
         part = nil
@@ -49,10 +52,10 @@ function TargetService.createTarget(position)
     -- 主体部分
     local targetPart = Instance.new("Part")
     targetPart.Name = "Base"
-    targetPart.Size = DroneConfig.TARGETS.APPEARANCE.SIZE
+    targetPart.Size = Config.TARGETS.APPEARANCE.SIZE
     targetPart.Position = position
-    targetPart.Material = DroneConfig.TARGETS.APPEARANCE.MATERIAL
-    targetPart.Color = DroneConfig.TARGETS.APPEARANCE.COLOR
+    targetPart.Material = Config.TARGETS.APPEARANCE.MATERIAL
+    targetPart.Color = Config.TARGETS.APPEARANCE.COLOR
     targetPart.Anchored = true
     targetPart.CanCollide = false
     targetPart.Parent = targetModel
@@ -89,7 +92,7 @@ function TargetService.createTarget(position)
     targetModel.PrimaryPart = targetPart
 
     -- 添加标识牌
-    if DroneConfig.TARGETS.MARKER.ENABLED then
+    if Config.TARGETS.MARKER.ENABLED then
         local gui = Instance.new("BillboardGui")
         gui.Size = UDim2.new(0, 100, 0, 50)
         gui.StudsOffset = Vector3.new(0, 4, 0)
@@ -98,9 +101,9 @@ function TargetService.createTarget(position)
         local textLabel = Instance.new("TextLabel")
         textLabel.Size = UDim2.new(1, 0, 1, 0)
         textLabel.BackgroundTransparency = 1
-        textLabel.Text = DroneConfig.TARGETS.MARKER.TEXT
-        textLabel.TextColor3 = DroneConfig.TARGETS.MARKER.TEXT_COLOR
-        textLabel.TextSize = DroneConfig.TARGETS.MARKER.TEXT_SIZE
+        textLabel.Text = Config.TARGETS.MARKER.TEXT
+        textLabel.TextColor3 = Config.TARGETS.MARKER.TEXT_COLOR
+        textLabel.TextSize = Config.TARGETS.MARKER.TEXT_SIZE
         textLabel.TextStrokeTransparency = 0.5
         textLabel.Parent = gui
 
@@ -188,7 +191,7 @@ function TargetService.destroyTarget(targetId, destroyerId)
     end
 
     target.alive = false
-    target.respawnTime = tick() + DroneConfig.TARGETS.RESPAWN_TIME
+    target.respawnTime = tick() + Config.TARGETS.RESPAWN_TIME
 
     -- 隐藏靶子
     if target.model then
@@ -209,7 +212,7 @@ function TargetService.destroyTarget(targetId, destroyerId)
         end
     end
 
-    print("💥 靶子", targetId, "被摧毁，将在", DroneConfig.TARGETS.RESPAWN_TIME, "秒后重生")
+    print("💥 靶子", targetId, "被摧毁，将在", Config.TARGETS.RESPAWN_TIME, "秒后重生")
 
     -- 通知所有客户端靶子被摧毁
     Events.Target.TargetDestroyed:FireAllClients(targetId, destroyerId)
@@ -234,7 +237,7 @@ function TargetService.respawnTarget(targetId)
                 if part.Name == "Base" then
                     part.Transparency = 0
                     part.CanCollide = false
-                    part.Color = DroneConfig.TARGETS.APPEARANCE.COLOR
+                    part.Color = Config.TARGETS.APPEARANCE.COLOR
                 elseif part.Name == "Pole" then
                     part.Transparency = 0
                     part.CanCollide = false
@@ -310,14 +313,14 @@ function TargetService.initialize()
     print("🎯 初始化靶子系统...")
 
     -- 生成靶子
-    for i = 1, DroneConfig.TARGETS.COUNT do
+    for i = 1, Config.TARGETS.COUNT do
         -- 在圆形区域内随机生成位置
-        local angle = (i - 1) * (360 / DroneConfig.TARGETS.COUNT) + math.random(-30, 30)
-        local distance = math.random(50, DroneConfig.TARGETS.SPAWN_RADIUS)
+        local angle = (i - 1) * (360 / Config.TARGETS.COUNT) + math.random(-30, 30)
+        local distance = math.random(50, Config.TARGETS.SPAWN_RADIUS)
 
         local x = math.cos(math.rad(angle)) * distance
         local z = math.sin(math.rad(angle)) * distance
-        local position = Vector3.new(x, DroneConfig.TARGETS.HEIGHT, z)
+        local position = Vector3.new(x, Config.TARGETS.HEIGHT, z)
 
         TargetService.createTarget(position)
     end
@@ -335,7 +338,7 @@ function TargetService.initialize()
         end
     end)
 
-    print("✅ 靶子系统初始化完成，共创建", DroneConfig.TARGETS.COUNT, "个靶子")
+    print("✅ 靶子系统初始化完成，共创建", Config.TARGETS.COUNT, "个靶子")
 end
 
 -- 清理靶子系统

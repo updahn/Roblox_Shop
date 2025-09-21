@@ -11,9 +11,9 @@ local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
 local Config = require(SharedModules:WaitForChild("Config"))
 
 -- 导入数据服务模块
-local DataStoreManager = require(script.Parent:WaitForChild("DataStoreManager"))
-local UserDataService = require(script.Parent:WaitForChild("UserDataService"))
-local AdminDataService = require(script.Parent:WaitForChild("AdminDataService"))
+local DataStoreManager = require(script.Parent.Parent.data:WaitForChild("DataStoreManager"))
+local UserDataService = require(script.Parent.Parent.data:WaitForChild("UserDataService"))
+local AdminDataService = require(script.Parent.Parent.data:WaitForChild("AdminDataService"))
 
 -- 用户会话存储（替换令牌系统）
 local userSessions = {}

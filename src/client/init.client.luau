@@ -10,18 +10,20 @@ local player = Players.LocalPlayer
 local function waitForServerData()
     print("🔄 商店客户端加载中...")
 
-    local success, data = pcall(function()
+    local success, sharedModules = pcall(function()
         local sharedModules = ReplicatedStorage:WaitForChild("SharedModules", 15)
-        sharedModules:WaitForChild("ShopData", 5)
-        sharedModules:WaitForChild("ShopEvents", 5)
+        sharedModules:WaitForChild("ShopData", 10)
+        sharedModules:WaitForChild("ShopEvents", 10)
         return sharedModules
     end)
 
-    if not success then
+    if not success or not sharedModules then
         warn("❌ 客户端: 等待服务端数据超时")
+        warn("💡 提示: 确保服务端已正确启动并设置了共享模块")
         return false
     end
 
+    print("✅ 客户端: 服务端数据加载成功")
     return true
 end
 

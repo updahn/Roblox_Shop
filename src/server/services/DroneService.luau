@@ -11,8 +11,11 @@ local DroneService = {}
 
 -- 等待模块
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
-local DroneConfig = require(SharedModules:WaitForChild("DroneConfig"))
+local Config = require(SharedModules:WaitForChild("Config"))
 local Events = require(SharedModules:WaitForChild("ShopEvents"))
+
+-- 使用统一的配置
+local DroneConfig = Config.DRONE_CONFIG
 
 -- 活跃无人机管理
 local activeDrones = {} -- [player] = droneData
@@ -22,12 +25,17 @@ local activeDrones = {} -- [player] = droneData
 -- ==============================================
 
 local function log(message, ...)
-    DroneConfig.log("[服务端]", message, ...)
+    if Config and Config.log then
+        Config.log("[服务端]", message, ...)
+    else
+        -- 备用日志函数
+        Config.log("[服务端]", message, ...)
+    end
 end
 
 -- 创建攻击特效
 local function createAttackEffect(startPos, endPos)
-    if not DroneConfig.DRONE.EFFECTS.ATTACK_EFFECT then return end
+    if not Config.DRONE_CONFIG.EFFECTS.ATTACK_EFFECT then return end
 
     -- 创建激光束特效
     local beam = Instance.new("Beam")
@@ -56,19 +64,19 @@ local function createAttackEffect(startPos, endPos)
 
     beam.Attachment0 = attachment1
     beam.Attachment1 = attachment2
-    beam.Color = ColorSequence.new(DroneConfig.EFFECTS.ATTACK_EFFECT.BEAM_COLOR)
-    beam.Width0 = DroneConfig.EFFECTS.ATTACK_EFFECT.BEAM_WIDTH
-    beam.Width1 = DroneConfig.EFFECTS.ATTACK_EFFECT.BEAM_WIDTH
+    beam.Color = ColorSequence.new(Config.DRONE_CONFIG.EFFECTS.ATTACK_EFFECT.BEAM_COLOR)
+    beam.Width0 = Config.DRONE_CONFIG.EFFECTS.ATTACK_EFFECT.BEAM_WIDTH
+    beam.Width1 = Config.DRONE_CONFIG.EFFECTS.ATTACK_EFFECT.BEAM_WIDTH
     beam.Parent = part1
 
     -- 自动清理
-    Debris:AddItem(part1, DroneConfig.EFFECTS.ATTACK_EFFECT.BEAM_DURATION)
-    Debris:AddItem(part2, DroneConfig.EFFECTS.ATTACK_EFFECT.BEAM_DURATION)
+    Debris:AddItem(part1, Config.DRONE_CONFIG.EFFECTS.ATTACK_EFFECT.BEAM_DURATION)
+    Debris:AddItem(part2, Config.DRONE_CONFIG.EFFECTS.ATTACK_EFFECT.BEAM_DURATION)
 end
 
 -- 创建爆炸特效
 local function createExplosionEffect(position)
-    if not DroneConfig.DRONE.EFFECTS.EXPLOSION_EFFECT then return end
+    if not Config.DRONE_CONFIG.EFFECTS.EXPLOSION_EFFECT then return end
 
     -- 创建爆炸效果容器
     local effectPart = Instance.new("Part")
@@ -177,7 +185,7 @@ end
 
 -- 创建生成特效
 local function createSpawnEffect(position)
-    if not DroneConfig.DRONE.EFFECTS.SPAWN_EFFECT then return end
+    if not Config.DRONE_CONFIG.EFFECTS.SPAWN_EFFECT then return end
 
     -- 创建粒子发射器
     local effectPart = Instance.new("Part")
@@ -194,9 +202,9 @@ local function createSpawnEffect(position)
     local particles = Instance.new("ParticleEmitter")
     particles.Parent = attachment
     particles.Enabled = true
-    particles.Lifetime = NumberRange.new(DroneConfig.EFFECTS.SPAWN_EFFECT.LIFETIME)
-    particles.Rate = DroneConfig.EFFECTS.SPAWN_EFFECT.PARTICLE_COUNT
-    particles.Color = ColorSequence.new(DroneConfig.EFFECTS.SPAWN_EFFECT.COLOR)
+    particles.Lifetime = NumberRange.new(Config.DRONE_CONFIG.EFFECTS.SPAWN_EFFECT.LIFETIME)
+    particles.Rate = Config.DRONE_CONFIG.EFFECTS.SPAWN_EFFECT.PARTICLE_COUNT
+    particles.Color = ColorSequence.new(Config.DRONE_CONFIG.EFFECTS.SPAWN_EFFECT.COLOR)
     particles.VelocityInheritance = 0.5
     particles.Speed = NumberRange.new(5, 15)
 
@@ -204,7 +212,7 @@ local function createSpawnEffect(position)
     spawn(function()
         wait(0.5)
         particles.Enabled = false
-        Debris:AddItem(effectPart, DroneConfig.EFFECTS.SPAWN_EFFECT.LIFETIME + 1)
+        Debris:AddItem(effectPart, Config.DRONE_CONFIG.EFFECTS.SPAWN_EFFECT.LIFETIME + 1)
     end)
 end
 
@@ -214,7 +222,7 @@ local function createDestroyEffect(position)
     return
 
     --[[
-    if not DroneConfig.DRONE.EFFECTS.DESTROY_EFFECT then return end
+    if not Config.DRONE_CONFIG.EFFECTS.DESTROY_EFFECT then return end
 
     -- 创建爆炸特效
     local explosion = Instance.new("Explosion")
@@ -350,15 +358,15 @@ end
 -- 加载无人机模型
 local function loadDroneModel()
     -- 首先尝试加载主要模型
-    local drone = tryLoadModelFromId(DroneConfig.MODEL.ASSET_ID)
+    local drone = tryLoadModelFromId(Config.DRONE_CONFIG.MODEL.ASSET_ID)
     if drone then
         return drone
     end
 
     -- 如果主要模型失败，尝试备用模型
-    if DroneConfig.MODEL.FALLBACK_ASSET_IDS then
-        for _, fallbackId in ipairs(DroneConfig.MODEL.FALLBACK_ASSET_IDS) do
-            if fallbackId ~= DroneConfig.MODEL.ASSET_ID then -- 避免重复尝试主要模型
+    if Config.DRONE_CONFIG.MODEL.FALLBACK_ASSET_IDS then
+        for _, fallbackId in ipairs(Config.DRONE_CONFIG.MODEL.FALLBACK_ASSET_IDS) do
+            if fallbackId ~= Config.DRONE_CONFIG.MODEL.ASSET_ID then -- 避免重复尝试主要模型
                 drone = tryLoadModelFromId(fallbackId)
                 if drone then
                     return drone
@@ -530,12 +538,12 @@ local function attackTarget(drone, target, targetType)
 
         -- 直接在服务端处理靶子伤害 - 获取TargetService
         local success, TargetService = pcall(function()
-            return require(script.Parent:WaitForChild("TargetService"))
+            return require(script.Parent.Parent.utils:WaitForChild("TargetService"))
         end)
 
         if success and TargetService then
-            local destroyed = TargetService.damageTarget(targetId, DroneConfig.DRONE.ATTACK_DAMAGE, ownerName)
-            log("🔥 无人机攻击靶子:", targetId, "造成伤害:", DroneConfig.DRONE.ATTACK_DAMAGE, destroyed and "(被摧毁)" or "")
+            local destroyed = TargetService.damageTarget(targetId, Config.DRONE_CONFIG.ATTACK_DAMAGE, ownerName)
+            log("🔥 无人机攻击靶子:", targetId, "造成伤害:", Config.DRONE_CONFIG.ATTACK_DAMAGE, destroyed and "(被摧毁)" or "")
 
             -- 如果靶子被摧毁，创建爆炸效果
             if destroyed then
@@ -549,8 +557,8 @@ local function attackTarget(drone, target, targetType)
         local humanoid = target:FindFirstChild("Humanoid")
         if humanoid then
             local oldHealth = humanoid.Health
-            humanoid.Health = humanoid.Health - DroneConfig.DRONE.ATTACK_DAMAGE
-            log("攻击目标:", target.Name, "造成伤害:", DroneConfig.DRONE.ATTACK_DAMAGE)
+            humanoid.Health = humanoid.Health - Config.DRONE_CONFIG.ATTACK_DAMAGE
+            log("攻击目标:", target.Name, "造成伤害:", Config.DRONE_CONFIG.ATTACK_DAMAGE)
 
             -- 如果目标被击败，创建爆炸效果
             if humanoid.Health <= 0 and oldHealth > 0 then
@@ -561,8 +569,8 @@ local function attackTarget(drone, target, targetType)
 
     -- 播放攻击音效
     local sound = Instance.new("Sound")
-    sound.SoundId = DroneConfig.SOUNDS.ATTACK
-    sound.Volume = DroneConfig.SOUNDS.VOLUME.ATTACK
+    sound.SoundId = Config.DRONE_CONFIG.SOUNDS.ATTACK
+    sound.Volume = Config.DRONE_CONFIG.SOUNDS.VOLUME.ATTACK
     sound.Parent = body
     sound:Play()
 
@@ -595,14 +603,14 @@ local function updateDroneMovement(droneData)
     local currentPos = body.Position
     local targetPos
 
-    if mode == DroneConfig.MODES.FOLLOW then
+    if mode == Config.DRONE_CONFIG.MODES.FOLLOW then
         -- 跟随模式：根据玩家朝向智能跟随
         local humanoidRootPart = player.Character.HumanoidRootPart
         local lookDirection = humanoidRootPart.CFrame.LookVector
 
         -- 计算跟随位置（在玩家身后上方）
-        local behindOffset = -lookDirection * DroneConfig.DRONE.FOLLOW_DISTANCE
-        local heightOffset = Vector3.new(0, DroneConfig.DRONE.FOLLOW_HEIGHT, 0)
+        local behindOffset = -lookDirection * Config.DRONE_CONFIG.FOLLOW_DISTANCE
+        local heightOffset = Vector3.new(0, Config.DRONE_CONFIG.FOLLOW_HEIGHT, 0)
         targetPos = playerPos + behindOffset + heightOffset
 
         -- 添加一些随机偏移以避免过于僵硬的跟随
@@ -625,7 +633,7 @@ local function updateDroneMovement(droneData)
     bodyPosition.Position = targetPos
 
     -- 调试信息
-    if DroneConfig.DEBUG.VERBOSE_LOGGING then
+    if Config.DEBUG and Config.DEBUG.VERBOSE_LOGGING then
         local distance = (currentPos - targetPos).Magnitude
         if distance > 1 then
             log("无人机移动:", player.Name, "模式:", mode, "距离目标:", math.floor(distance), "studs")
@@ -656,7 +664,7 @@ function DroneService.spawnDrone(player: Player)
 
     -- 设置无人机位置
     local playerPos = player.Character.HumanoidRootPart.Position
-    local spawnPos = playerPos + Vector3.new(0, DroneConfig.DRONE.FOLLOW_HEIGHT, -DroneConfig.DRONE.FOLLOW_DISTANCE)
+    local spawnPos = playerPos + Vector3.new(0, Config.DRONE_CONFIG.FOLLOW_HEIGHT, -Config.DRONE_CONFIG.FOLLOW_DISTANCE)
 
     droneModel:SetPrimaryPartCFrame(CFrame.new(spawnPos))
     droneModel.Parent = workspace
@@ -666,8 +674,8 @@ function DroneService.spawnDrone(player: Player)
 
     -- 播放生成音效
     local sound = Instance.new("Sound")
-    sound.SoundId = DroneConfig.SOUNDS.SPAWN
-    sound.Volume = DroneConfig.SOUNDS.VOLUME.SPAWN
+    sound.SoundId = Config.DRONE_CONFIG.SOUNDS.SPAWN
+    sound.Volume = Config.DRONE_CONFIG.SOUNDS.VOLUME.SPAWN
     sound.Parent = droneModel.PrimaryPart
     sound:Play()
     sound.Ended:Connect(function()
@@ -684,7 +692,7 @@ function DroneService.spawnDrone(player: Player)
     local droneData = {
         model = droneModel,
         owner = player,
-        mode = DroneConfig.MODES.FOLLOW,
+        mode = Config.DRONE_CONFIG.MODES.FOLLOW,
         spawnTime = tick(),
         lastAttackTime = 0,
         guardPosition = nil
@@ -733,7 +741,7 @@ function DroneService.switchDroneMode(player: Player, newMode: string)
         return false, "您没有活跃的无人机"
     end
 
-    if newMode ~= DroneConfig.MODES.FOLLOW and newMode ~= DroneConfig.MODES.GUARD then
+    if newMode ~= Config.DRONE_CONFIG.MODES.FOLLOW and newMode ~= Config.DRONE_CONFIG.MODES.GUARD then
         return false, "无效的模式"
     end
 
@@ -741,9 +749,9 @@ function DroneService.switchDroneMode(player: Player, newMode: string)
     droneData.mode = newMode
 
     -- 如果切换到驻守模式，记录当前位置
-    if newMode == DroneConfig.MODES.GUARD and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+    if newMode == Config.DRONE_CONFIG.MODES.GUARD and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         local playerPos = player.Character.HumanoidRootPart.Position
-        droneData.guardPosition = playerPos + Vector3.new(0, DroneConfig.DRONE.HOVER_HEIGHT, 0)
+        droneData.guardPosition = playerPos + Vector3.new(0, Config.DRONE_CONFIG.HOVER_HEIGHT, 0)
     end
 
     -- 通知客户端
@@ -751,7 +759,7 @@ function DroneService.switchDroneMode(player: Player, newMode: string)
 
     log("玩家", player.Name, "将无人机模式从", oldMode, "切换到", newMode)
 
-    return true, "模式已切换到" .. (newMode == DroneConfig.MODES.FOLLOW and "跟随模式" or "驻守模式")
+    return true, "模式已切换到" .. (newMode == Config.DRONE_CONFIG.MODES.FOLLOW and "跟随模式" or "驻守模式")
 end
 
 function DroneService.getDroneInfo(player: Player)
@@ -761,7 +769,7 @@ function DroneService.getDroneInfo(player: Player)
     end
 
     local currentTime = tick()
-    local timeRemaining = math.max(0, DroneConfig.DRONE.LIFETIME - (currentTime - droneData.spawnTime))
+    local timeRemaining = math.max(0, Config.DRONE_CONFIG.LIFETIME - (currentTime - droneData.spawnTime))
 
     return {
         mode = droneData.mode,
@@ -780,7 +788,7 @@ local function mainLoop()
     for player, droneData in pairs(activeDrones) do
         -- 检查无人机是否超时
         local timeElapsed = currentTime - droneData.spawnTime
-        if timeElapsed >= DroneConfig.DRONE.LIFETIME then
+        if timeElapsed >= Config.DRONE_CONFIG.LIFETIME then
             -- 自动销毁无人机
             createDestroyEffect(droneData.model.PrimaryPart.Position)
             droneData.model:Destroy()
@@ -796,9 +804,9 @@ local function mainLoop()
         updateDroneMovement(droneData)
 
         -- 攻击逻辑
-        if (currentTime - droneData.lastAttackTime) >= DroneConfig.DRONE.ATTACK_INTERVAL then
+        if (currentTime - droneData.lastAttackTime) >= Config.DRONE_CONFIG.ATTACK_INTERVAL then
             local dronePos = droneData.model.PrimaryPart.Position
-            local target, targetType = findNearestTarget(dronePos, DroneConfig.DRONE.ATTACK_RANGE, player)
+            local target, targetType = findNearestTarget(dronePos, Config.DRONE_CONFIG.ATTACK_RANGE, player)
 
             if target then
                 local attackSuccess = attackTarget(droneData.model, target, targetType)
@@ -811,7 +819,7 @@ local function mainLoop()
                     log("✅ 无人机攻击成功：类型=" .. targetType .. ", 目标=" .. targetName)
                 else
                     -- 攻击失败，可能是目标已消失，重置攻击时间以便立即寻找新目标
-                    droneData.lastAttackTime = currentTime - DroneConfig.DRONE.ATTACK_INTERVAL + 0.1
+                    droneData.lastAttackTime = currentTime - Config.DRONE_CONFIG.ATTACK_INTERVAL + 0.1
                 end
             end
         end

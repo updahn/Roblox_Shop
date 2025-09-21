@@ -6,7 +6,7 @@ local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 
 -- 环境管理器
-local EnvironmentManager = require(script.Parent.EnvironmentManager)
+local EnvironmentManager = require(script.Parent.Parent.utils.EnvironmentManager)
 
 local DataStoreManager = {}
 
@@ -594,7 +594,7 @@ end
 -- 初始化默认商品数据
 local function initializeItemsData()
     -- 使用外部 ItemsInitializer 模块来处理商品初始化
-    local ItemsInitializer = require(script.Parent.ItemsInitializer)
+    local ItemsInitializer = require(script.Parent.Parent.utils.ItemsInitializer)
     ItemsInitializer.initializeAllItems()
 end
 

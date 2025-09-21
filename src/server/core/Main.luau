@@ -17,12 +17,14 @@ end
 local Config = require(SharedModules:WaitForChild("Config"))
 local Events = require(SharedModules:WaitForChild("ShopEvents"))
 
--- 加载服务模块
-local ModulesFolder = script.Parent:WaitForChild("modules")
-local UserService = require(ModulesFolder:WaitForChild("UserService"))
-local AdminService = require(ModulesFolder:WaitForChild("AdminService"))
-local DroneService = require(ModulesFolder:WaitForChild("DroneService"))
-local TargetService = require(ModulesFolder:WaitForChild("TargetService"))
+-- 加载服务模块 - 使用重构后的路径
+local ServicesFolder = script.Parent.Parent:WaitForChild("services")
+local UtilsFolder = script.Parent.Parent:WaitForChild("utils")
+
+local UserService = require(ServicesFolder:WaitForChild("UserService"))
+local AdminService = require(ServicesFolder:WaitForChild("AdminService"))
+local DroneService = require(ServicesFolder:WaitForChild("DroneService"))
+local TargetService = require(UtilsFolder:WaitForChild("TargetService"))
 
 -- 初始化靶子系统
 TargetService.initialize()

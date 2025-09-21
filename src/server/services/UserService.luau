@@ -61,7 +61,7 @@ function UserService.authenticatePlayer(player: Player)
             spawn(function()
                 wait(1)
                 local success = pcall(function()
-                    local AdminDataService = require(script.Parent:WaitForChild("AdminDataService"))
+                    local AdminDataService = require(script.Parent.Parent.data:WaitForChild("AdminDataService"))
                     AdminDataService.promoteToAdmin(userId)
                 end)
                 if success then
@@ -156,7 +156,7 @@ function UserService.refreshPlayerData(player: Player)
     end
 
     -- 清除会员状态缓存以确保获取最新数据
-    local UserDataService = DataService.getUserDataService and DataService.getUserDataService() or require(script.Parent:WaitForChild("UserDataService"))
+    local UserDataService = DataService.getUserDataService and DataService.getUserDataService() or require(script.Parent.Parent.data:WaitForChild("UserDataService"))
     if UserDataService.clearMembershipCache then
         UserDataService.clearMembershipCache(session.userId)
     end
@@ -302,7 +302,7 @@ local function handleBuyItem(player: Player, itemId: string, quantity: number)
     if success then
         -- 如果购买的是会员商品，特殊处理确保会员状态更新
         if isMembershipItem then
-            local UserDataService = require(script.Parent:WaitForChild("UserDataService"))
+            local UserDataService = require(script.Parent.Parent.data:WaitForChild("UserDataService"))
             if UserDataService.clearMembershipCache then
                 UserDataService.clearMembershipCache(session.userId)
                 print("🧹 [购买] 清除会员缓存:", player.Name, itemId)

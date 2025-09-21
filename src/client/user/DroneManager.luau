@@ -13,8 +13,11 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 -- 等待模块
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
-local DroneConfig = require(SharedModules:WaitForChild("DroneConfig"))
+local Config = require(SharedModules:WaitForChild("Config"))
 local Events = require(SharedModules:WaitForChild("ShopEvents"))
+
+-- 使用统一的配置
+local DroneConfig = Config.DRONE_CONFIG
 
 -- UI元素
 local screenGui
@@ -37,7 +40,7 @@ local droneStatus = {
 -- ==============================================
 
 local function log(message, ...)
-    DroneConfig.log("[客户端]", message, ...)
+    Config.log("INFO", "[客户端] " .. message, {...})
 end
 
 -- 创建按钮
@@ -243,7 +246,7 @@ local function handleDroneSpawned(success)
     if success then
         droneStatus.isActive = true
         droneStatus.mode = DroneConfig.MODES.FOLLOW
-        droneStatus.timeRemaining = DroneConfig.DRONE.LIFETIME
+        droneStatus.timeRemaining = DroneConfig.LIFETIME
 
         updateButtonStates()
         log("无人机已召唤")

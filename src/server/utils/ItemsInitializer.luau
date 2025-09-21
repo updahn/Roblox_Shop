@@ -1,7 +1,7 @@
 -- 商品初始化模块
 -- 包含所有来自 init.sql 的商品数据
 
-local DataStoreManager = require(script.Parent.DataStoreManager)
+local DataStoreManager = require(script.Parent.Parent.data.DataStoreManager)
 
 local ItemsInitializer = {}
 
@@ -517,7 +517,11 @@ function ItemsInitializer.initializeAllItems()
         local success = DataStoreManager.safeSetAsync("ITEMS", "all_items", allItems)
 
         if success then
-            print("✅ 商品数据初始化成功！共初始化", existingCount, "个商品")
+            local totalCount = 0
+            for _ in pairs(allItems) do
+                totalCount = totalCount + 1
+            end
+            print("✅ 商品数据初始化成功！共初始化", totalCount, "个商品")
 
             -- 按类别统计商品数量
             local categoryCount = {}
