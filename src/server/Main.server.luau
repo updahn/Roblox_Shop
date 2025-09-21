@@ -28,11 +28,10 @@ local TargetService = require(ModulesFolder:WaitForChild("TargetService"))
 TargetService.initialize()
 
 print("✅ 商店系统已启动")
-print("🌐 API服务器: " .. Config.API.BASE_URL)
 print("🛒 支持普通用户和管理员功能")
 print("🤖 无人机系统已激活")
 print("🎯 靶子系统已激活")
-print("📊 数据存储在MySQL数据库中")
+print("📊 数据存储在 DataStore 中")
 
 -- 处理玩家连接事件
 Players.PlayerAdded:Connect(function(player)

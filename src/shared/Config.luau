@@ -4,64 +4,28 @@
 本文件包含所有系统配置参数，用于统一管理商店系统的各种设置。
 
 包含的配置模块：
-- API服务器配置
 - 管理员权限配置
 - UI主题和样式配置
 - 游戏玩法配置
 - 调试和开发配置
 - 本地化配置
-- 安全配置
 
 用法：
   local Config = require(路径到该文件)
-  Config.API.BASE_URL -- 获取API基础URL
 --]]
 
 local Config = {}
 
--- ==============================================
--- API 服务器配置
--- 用于配置与后端 API 服务器的通信参数
--- ==============================================
-
-Config.API = {
-    -- 基础URL配置
-    BASE_URL = "http://47.243.109.39/api",
-
-    -- 请求超时配置 (秒)
-    TIMEOUT = 30,
-
-    -- 重试配置
-    RETRY_ATTEMPTS = 3,
-    RETRY_DELAY = 2,
-
-    -- 请求头配置
-    DEFAULT_HEADERS = {
-        ["Content-Type"] = "application/json"
-    },
-
-    -- API端点配置
-    ENDPOINTS = {
-        AUTH = "/auth",
-        USERS = "/users",
-        ITEMS = "/items",
-        ADMIN = "/admin"
-    }
-}
 
 -- ==============================================
 -- 管理员权限配置
--- 通过API动态加载管理员信息，支持缓存机制
+-- 本地配置默认管理员用户名，在游戏初次加载时自动设置为管理员
 -- ==============================================
 
 Config.ADMIN = {
-    -- 权限级别配置
-    PERMISSIONS = {
-        MANAGE_USERS = true,
-        MANAGE_ITEMS = true,
-        MANAGE_TRANSACTIONS = true,
-        VIEW_ANALYTICS = true,
-        SYSTEM_ADMIN = true
+    -- 默认管理员用户名列表（在这里添加需要设置为管理员的用户名）
+    DEFAULT_ADMIN_USERNAMES = {
+        "updahn"
     },
 
     -- 配置是否已加载
@@ -70,20 +34,6 @@ Config.ADMIN = {
     _CACHE_DURATION = 300 -- 缓存5分钟
 }
 
--- ==============================================
--- 系统配置（从API动态加载）
--- 支持覆盖本地默认配置
--- ==============================================
-
-Config.SYSTEM = {
-    -- 动态获取的系统配置 (从API加载)
-    _VALUES = {},
-
-    -- 配置是否已加载
-    _LOADED = false,
-    _LAST_UPDATE = 0,
-    _CACHE_DURATION = 300 -- 缓存5分钟
-}
 
 -- ==============================================
 -- UI 主题和样式配置
@@ -201,7 +151,6 @@ Config.DEBUG = {
 
     -- 测试数据
     TEST_DATA = {
-        USE_MOCK_API = false,
         MOCK_DELAY = 1000, -- 毫秒
         FAKE_NETWORK_ISSUES = false
     }
@@ -220,8 +169,6 @@ Config.LOCALIZATION = {
     }
 }
 
--- 删除了未使用的安全配置 - 由后端API处理
-
 -- ==============================================
 -- 工具函数
 -- 提供各种帮助函数用于配置管理和数据处理
@@ -231,138 +178,9 @@ Config.LOCALIZATION = {
 local adminValidationCache = {}
 local ADMIN_CACHE_DURATION = 30
 
--- 获取完整的API URL
-function Config.getApiUrl(endpoint)
-    return Config.API.BASE_URL .. endpoint
-end
-
 -- 检查调试模式
 function Config.isDebugMode()
     return Config.DEBUG.ENABLED
-end
-
--- 删除了本地化文本函数 - 现在使用中文
-
---[[
-从API加载管理员配置
-
-该函数从后端 API 获取最新的管理员配置信息，
-并更新本地缓存。如果请求失败，将保持之前的配置。
-
-@return boolean - 是否成功加载配置
---]]
-function Config.loadAdminConfig()
-    local HttpService = game:GetService("HttpService")
-    local success, result = pcall(function()
-        local response = HttpService:GetAsync(Config.getApiUrl("/config"))
-        return HttpService:JSONDecode(response)
-    end)
-
-    if success and result.success then
-        local adminConfig = result.data.admin
-        if adminConfig then
-            Config.ADMIN._LOADED = true
-            Config.ADMIN._LAST_UPDATE = tick()
-
-            Config.log("INFO", "管理员配置已从API加载", adminConfig)
-            return true
-        end
-    else
-        Config.log("ERROR", "加载管理员配置失败", result)
-    end
-
-    return false
-end
-
---[[
-从API加载系统配置
-
-该函数从后端 API 获取最新的系统配置信息，
-并更新本地缓存。可用于覆盖默认的游戏配置。
-
-@return boolean - 是否成功加载配置
---]]
-function Config.loadSystemConfig()
-    local HttpService = game:GetService("HttpService")
-    local success, result = pcall(function()
-        local response = HttpService:GetAsync(Config.getApiUrl("/config"))
-        return HttpService:JSONDecode(response)
-    end)
-
-    if success and result.success then
-        local systemConfig = result.data.system
-        if systemConfig then
-            Config.SYSTEM._VALUES = systemConfig
-            Config.SYSTEM._LOADED = true
-            Config.SYSTEM._LAST_UPDATE = tick()
-
-            -- 更新游戏配置中的相关值
-            if systemConfig.default_user_coins then
-                Config.GAME.ECONOMY.STARTING_COINS = tonumber(systemConfig.default_user_coins) or Config.GAME.ECONOMY.STARTING_COINS
-            end
-            if systemConfig.sell_rate then
-                Config.GAME.ECONOMY.SELL_RATE = tonumber(systemConfig.sell_rate) or Config.GAME.ECONOMY.SELL_RATE
-            end
-            if systemConfig.max_coins then
-                Config.GAME.ECONOMY.MAX_COINS = tonumber(systemConfig.max_coins) or Config.GAME.ECONOMY.MAX_COINS
-            end
-
-            Config.log("INFO", "系统配置已从API加载", systemConfig)
-            return true
-        end
-    else
-        Config.log("ERROR", "加载系统配置失败", result)
-    end
-
-    return false
-end
-
---[[
-确保系统配置已加载
-
-检查配置是否已加载及是否过期，如果需要则重新加载。
-使用缓存机制以避免频繁的 API 请求。
-
-@return boolean - 配置是否可用
---]]
-function Config.ensureSystemConfigLoaded()
-    local currentTime = tick()
-    if not Config.SYSTEM._LOADED or
-       (currentTime - Config.SYSTEM._LAST_UPDATE) > Config.SYSTEM._CACHE_DURATION then
-        return Config.loadSystemConfig()
-    end
-    return true
-end
-
---[[
-获取系统配置值
-
-获取指定键的系统配置值，如果未找到则返回默认值。
-
-@param key string - 配置键
-@param defaultValue any - 默认值
-@return any - 配置值
---]]
-function Config.getSystemValue(key, defaultValue)
-    Config.ensureSystemConfigLoaded()
-    return Config.SYSTEM._VALUES[key] or defaultValue
-end
-
---[[
-确保管理员配置已加载
-
-检查配置是否已加载及是否过期，如果需要则重新加载。
-使用缓存机制以避免频繁的 API 请求。
-
-@return boolean - 配置是否可用
---]]
-function Config.ensureAdminConfigLoaded()
-    local currentTime = tick()
-    if not Config.ADMIN._LOADED or
-       (currentTime - Config.ADMIN._LAST_UPDATE) > Config.ADMIN._CACHE_DURATION then
-        return Config.loadAdminConfig()
-    end
-    return true
 end
 
 --[[
@@ -473,8 +291,6 @@ function Config.refreshAdminCache(player)
     end
 end
 
--- 删除了本地管理员管理函数 - 使用API验证
-
 --[[
 统一日志记录函数
 
@@ -487,7 +303,7 @@ end
 
 例子：
   Config.log("INFO", "系统启动")
-  Config.log("ERROR", "API请求失败", {error = "timeout"})
+  Config.log("ERROR", "数据加载失败", {error = "timeout"})
 --]]
 function Config.log(level, message, data)
     if not Config.DEBUG.ENABLED then return end
@@ -501,21 +317,17 @@ function Config.log(level, message, data)
         local logMessage = string.format("[%s] %s: %s", timestamp, level, message)
 
         if data then
-            logMessage = logMessage .. " | Data: " .. game:GetService("HttpService"):JSONEncode(data)
+            local success, jsonData = pcall(game:GetService("HttpService").JSONEncode, game:GetService("HttpService"), data)
+            if success then
+                logMessage = logMessage .. " | Data: " .. jsonData
+            else
+                logMessage = logMessage .. " | Data: [序列化失败]"
+            end
         end
 
         print(logMessage)
     end
 end
 
--- 自动初始化配置
-spawn(function()
-    wait(1) -- 等待游戏加载完成
-    if game:GetService("RunService"):IsServer() then
-        Config.ensureAdminConfigLoaded()
-        Config.ensureSystemConfigLoaded()
-        Config.log("INFO", "商店系统配置已初始化")
-    end
-end)
 
 return Config

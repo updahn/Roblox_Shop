@@ -111,7 +111,10 @@ function ShopSell.createItemCard(item, itemId, shopData, playerData, showQuantit
     descLabel.Parent = card
 
     -- 卖出价格标签
-    local sellPrice = math.floor(item.price * 0.8) -- 使用默认sell rate
+    local sellPrice = 0
+    if item.price and type(item.price) == "number" and item.price > 0 then
+        sellPrice = math.max(1, math.floor(item.price * 0.8)) -- 使用默认sell rate，确保至少为1
+    end
     local priceLabel = Instance.new("TextLabel")
     priceLabel.Name = "PriceLabel"
     priceLabel.Text = "💰 " .. sellPrice .. " 金币"

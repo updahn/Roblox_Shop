@@ -14,51 +14,51 @@ local tutorialGui = nil
 local isShowing = false
 local currentStep = 1
 
--- 教程步骤数据 - 完整的新手引导
+-- 教程步骤数据 - 精简的新手引导
 local tutorialSteps = {
     {
-        title = "🎉 欢迎来到商店系统！",
-        content = "欢迎来到这个功能完整的商店系统！\n\n🏪 商品种类丰富：\n• 武器装备 - 剑类、盾牌、护甲\n• 消耗品 - 药水、食物、卷轴\n• 材料 - 宝石、矿石、木材\n• 工具书籍 - 法术书、历史书、地图\n• 会员卡 - 月卡、周卡、季卡等\n\n✨ 核心功能：\n• 智能买卖系统\n• 实时金币管理\n• 完整交易记录\n• 会员特权系统",
+        title = "🎉 欢迎来到商店系统",
+        content = "欢迎体验功能完整的商店系统！\n\n🏪 丰富商品分类\n• 武器装备 • 消耗品\n• 珍贵材料 • 工具书籍\n• 会员特权\n\n✨ 核心功能\n• 智能交易 • 金币管理\n• 交易记录 • 会员系统",
         buttonText = "开始教程"
     },
     {
-        title = "💰 金币与经济系统",
-        content = "💎 初始资金：每个新玩家都有 1000 金币起步\n\n💰 金币获取方式：\n• 出售物品获得金币（原价80%）\n• 会员每日登录奖励\n• 管理员活动奖励\n\n💸 金币消费：\n• 购买商品需要金币+税费（5%交易税）\n• 购买会员卡享受特权\n• 部分稀有物品限量购买\n\n📊 实时显示：\n• 界面顶部显示当前余额\n• 交易时显示金额变化\n• 支持大额数字格式化显示",
-        buttonText = "了解更多"
-    },
-    {
-        title = "🛍️ 商店操作指南",
-        content = "⌨️ 键盘快捷键：\n• 按 **E** 键 - 打开/关闭商店界面\n• 按 **ESC** 键 - 快速关闭所有界面\n• 按 **H** 键 - 查看详细帮助文档\n• 按 **Tab** 键 - 切换界面标签页\n\n🖱️ 鼠标操作：\n• 左键点击 - 选择和确认\n• 右键点击 - 快速操作菜单\n• 滚轮滚动 - 浏览商品列表\n\n📱 界面布局：\n• 顶部：金币余额和用户信息\n• 左侧：商品分类导航\n• 中央：商品展示区域\n• 底部：操作按钮和状态栏",
-        buttonText = "明白了"
-    },
-    {
-        title = "🛒 商品购买详解",
-        content = "🏪 购买流程：\n1️⃣ 浏览商品 - 在购买标签页查看所有商品\n2️⃣ 选择商品 - 点击心仪的物品查看详情\n3️⃣ 设定数量 - 使用数量选择器（注意限购）\n4️⃣ 确认购买 - 检查总价并确认交易\n\n🏷️ 商品信息：\n• 名称和图标 - 清晰的物品标识\n• 价格和税费 - 透明的费用计算\n• 库存状态 - 实时更新可用数量\n• 限购规则 - 每日/总量购买限制\n• 商品描述 - 详细的属性说明\n\n⚠️ 购买限制：\n• 检查金币余额是否充足\n• 注意每日限购数量\n• 某些特殊物品不可重复购买",
+        title = "💰 金币经济系统",
+        content = "💎 起始资金：1000 金币\n\n💰 获取金币\n• 出售物品（80% 回收价）\n• 会员每日奖励\n• 活动奖励\n\n💸 消费方式\n• 购买商品（含5%税费）\n• 升级会员\n• 限量稀有物品\n\n📊 实时余额显示",
         buttonText = "继续"
     },
     {
-        title = "💸 物品出售系统",
-        content = "💰 出售规则：\n• 出售价格 = 原购买价格 × 80%\n• 支持批量选择出售\n• 即时到账，无延迟\n• 自动计算最优出售方案\n\n📦 库存管理：\n• 按分类显示所有拥有物品\n• 显示每个物品的数量和价值\n• 支持搜索和筛选功能\n• 一键批量出售同类物品\n\n🔒 出售限制：\n• 某些特殊物品不可出售\n• 会员卡等消耗品不可转售\n• 任务道具可能有出售限制\n\n💡 出售建议：\n• 价格波动时选择合适时机\n• 优先出售过量的普通物品\n• 保留稀有物品以备不时之需",
+        title = "🛍️ 操作指南",
+        content = "⌨️ 快捷键\n• E - 打开商店\n• ESC - 关闭界面\n• H - 查看帮助\n• Tab - 切换标签\n\n🖱️ 鼠标操作\n• 左键 - 选择确认\n• 滚轮 - 浏览商品\n\n📱 界面布局\n• 顶部：余额信息\n• 左侧：分类导航\n• 中央：商品展示\n• 底部：操作按钮",
+        buttonText = "明白了"
+    },
+    {
+        title = "🛒 购买流程",
+        content = "🏪 简单四步骤\n1️⃣ 浏览商品\n2️⃣ 选择物品\n3️⃣ 设定数量\n4️⃣ 确认购买\n\n🏷️ 商品信息\n• 价格和税费透明\n• 库存实时更新\n• 限购规则明确\n\n⚠️ 购买提示\n• 检查余额充足\n• 注意限购数量",
+        buttonText = "继续"
+    },
+    {
+        title = "💸 出售系统",
+        content = "💰 出售规则\n• 80% 回收价格\n• 批量出售支持\n• 即时到账无延迟\n\n📦 库存管理\n• 分类显示所有物品\n• 显示数量和价值\n• 搜索筛选功能\n\n💡 出售建议\n• 优先出售过量普通物品\n• 保留稀有物品",
         buttonText = "下一步"
     },
     {
-        title = "📊 交易记录中心",
-        content = "📋 记录内容：\n• 完整的购买和出售历史\n• 精确的交易时间和金额\n• 详细的物品信息和数量\n• 交易前后的金币变化\n\n🔍 查询功能：\n• 按时间范围筛选记录\n• 按交易类型分类查看\n• 按物品名称搜索\n• 支持导出交易数据\n\n📈 数据统计：\n• 总交易次数和金额\n• 收入支出分析图表\n• 最常交易的物品排行\n• 交易趋势和习惯分析\n\n👑 管理员特权：\n• 管理员可查看全服交易数据\n• 监控异常交易行为\n• 生成系统运营报告",
+        title = "📊 交易记录",
+        content = "📋 记录内容\n• 完整购买出售历史\n• 精确时间和金额\n• 金币变化详情\n\n🔍 查询功能\n• 时间范围筛选\n• 交易类型分类\n• 物品名称搜索\n• 导出交易数据\n\n📈 数据统计\n• 总交易次数和金额\n• 收入支出分析\n• 物品交易排行",
         buttonText = "了解了"
     },
     {
-        title = "🤖 无人机与靶子系统",
-        content = "🚁 无人机功能：\n• 购买无人机商品后自动召唤战斗伙伴\n• 无人机会自动跟随并保护玩家\n• 具备强大的自动攻击能力\n• 支持跟随和驻守两种战斗模式\n\n🎯 靶子训练场：\n• 地图中设置了3个专用训练靶子\n• 无人机会优先攻击靶子进行训练\n• 靶子被摧毁后会自动重生\n• 观察无人机战斗表现，提升战术\n\n⚔️ 战斗特性：\n• 无人机优先攻击靶子，次选其他目标\n• 配备激光武器和粒子特效\n• 智能AI自动选择最佳攻击时机\n• 完整的音效和视觉反馈\n\n🎮 操作提示：\n• 购买无人机相关商品即可使用\n• 无人机会在你附近自动激活\n• 无需手动操作，完全智能化",
+        title = "🤖 无人机系统",
+        content = "🚁 无人机功能\n• 购买后自动召唤战斗伙伴\n• 自动跟随并保护玩家\n• 强大的自动攻击能力\n\n🎯 靶子训练场\n• 3个专用训练靶子\n• 无人机优先攻击靶子\n• 靶子自动重生\n\n🎮 使用方法\n• 购买无人机商品即可\n• 在附近自动激活\n• 完全智能化操作",
         buttonText = "太酷了"
     },
     {
-        title = "👑 会员系统介绍",
-        content = "💎 会员类型：\n• 周卡会员 - 7天特权，每日100金币\n• 月卡会员 - 30天特权，每日100金币\n• 季卡会员 - 90天特权，每日100金币\n• 高级月卡 - 30天特权，每日200金币\n• VIP年卡 - 365天特权，每日150金币\n\n🎁 会员特权：\n• 每日登录奖励自动发放\n• 支持最多7天的奖励补发\n• 会员专属商品和折扣\n• 优先客服支持\n\n⏰ 奖励机制：\n• 每日首次登录自动领取\n• 离线期间奖励会累积保存\n• 会员到期后停止奖励发放\n• 续费会员可延长有效期",
+        title = "👑 会员系统",
+        content = "💎 会员类型\n• 周卡 - 7天 每日100金币\n• 月卡 - 30天 每日100金币\n• 季卡 - 90天 每日100金币\n• 高级月卡 - 30天 每日200金币\n• VIP年卡 - 365天 每日150金币\n\n🎁 会员特权\n• 每日登录奖励\n• 最多7天补发\n• 专属商品折扣\n\n⏰ 奖励机制\n• 首次登录自动领取\n• 离线奖励累积保存\n• 到期停止发放",
         buttonText = "很棒"
     },
     {
-        title = "🎮 准备开始游戏！",
-        content = "🎓 恭喜！你已经掌握了所有核心功能：\n\n✅ 基础操作：\n• E键打开商店，ESC关闭界面\n• H键查看帮助，Tab切换标签\n\n✅ 交易系统：\n• 购买商品的完整流程\n• 出售物品的最佳策略\n• 交易记录的查询方法\n\n✅ 进阶功能：\n• 会员系统和每日奖励\n• 无人机战斗和靶子训练\n• 库存管理和批量操作\n• 数据统计和趋势分析\n\n🚀 现在就开始你的商店之旅吧！\n记住：明智的投资和交易是成功的关键！\n💡 别忘了试试无人机系统哦！",
+        title = "🎮 准备开始！",
+        content = "🎓 恭喜！你已经掌握了所有核心功能\n\n✅ 基础操作\n• E键打开商店，ESC关闭界面\n• H键查看帮助，Tab切换标签\n\n✅ 交易系统\n• 购买出售完整流程\n• 交易记录查询方法\n\n✅ 进阶功能\n• 会员系统和每日奖励\n• 无人机战斗系统\n• 数据统计和趋势分析\n\n🚀 现在就开始你的商店之旅吧！\n💡 明智投资和交易是成功关键！",
         buttonText = "开始游戏"
     }
 }
@@ -90,47 +90,84 @@ local function createTutorialGUI()
     -- 主面板
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 500, 0, 350)
-    mainFrame.Position = UDim2.new(0.5, -250, 0.5, -175)
-    mainFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+    mainFrame.Size = UDim2.new(0, 580, 0, 420)
+    mainFrame.Position = UDim2.new(0.5, -290, 0.5, -210)
+    mainFrame.BackgroundColor3 = Color3.new(0.98, 0.98, 0.98)
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = overlay
 
+    -- 阴影效果
+    local shadow = Instance.new("ImageLabel")
+    shadow.Name = "Shadow"
+    shadow.Size = UDim2.new(1, 20, 1, 20)
+    shadow.Position = UDim2.new(0, -10, 0, -10)
+    shadow.BackgroundTransparency = 1
+    shadow.ImageColor3 = Color3.new(0, 0, 0)
+    shadow.ImageTransparency = 0.8
+    shadow.ScaleType = Enum.ScaleType.Slice
+    shadow.SliceCenter = Rect.new(10, 10, 10, 10)
+    shadow.ZIndex = mainFrame.ZIndex - 1
+    shadow.Parent = overlay
+
     -- 圆角
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 15)
+    corner.CornerRadius = UDim.new(0, 20)
     corner.Parent = mainFrame
 
-    -- 标题
+    -- 标题背景
+    local titleBg = Instance.new("Frame")
+    titleBg.Name = "TitleBackground"
+    titleBg.Size = UDim2.new(1, 0, 0, 80)
+    titleBg.Position = UDim2.new(0, 0, 0, 0)
+    titleBg.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
+    titleBg.BorderSizePixel = 0
+    titleBg.Parent = mainFrame
+
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 20)
+    titleCorner.Parent = titleBg
+
+    -- 标题文本
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
-    titleLabel.Size = UDim2.new(1, -40, 0, 60)
-    titleLabel.Position = UDim2.new(0, 20, 0, 20)
+    titleLabel.Size = UDim2.new(1, -40, 1, 0)
+    titleLabel.Position = UDim2.new(0, 20, 0, 0)
     titleLabel.BackgroundTransparency = 1
     titleLabel.Text = tutorialSteps[1].title
-    titleLabel.TextColor3 = Color3.new(0.2, 0.2, 0.2)
-    titleLabel.TextScaled = true
-    titleLabel.Font = Enum.Font.SourceSansBold
-    titleLabel.Parent = mainFrame
+    titleLabel.TextColor3 = Color3.new(1, 1, 1)
+    titleLabel.TextSize = 24
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+    titleLabel.TextYAlignment = Enum.TextYAlignment.Center
+    titleLabel.Parent = titleBg
 
-    -- 内容
+    -- 内容区域
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Name = "ContentFrame"
+    contentFrame.Size = UDim2.new(1, -40, 0, 240)
+    contentFrame.Position = UDim2.new(0, 20, 0, 100)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
+
     local contentLabel = Instance.new("TextLabel")
     contentLabel.Name = "Content"
-    contentLabel.Size = UDim2.new(1, -40, 0, 180)
-    contentLabel.Position = UDim2.new(0, 20, 0, 90)
+    contentLabel.Size = UDim2.new(1, 0, 1, 0)
+    contentLabel.Position = UDim2.new(0, 0, 0, 0)
     contentLabel.BackgroundTransparency = 1
     contentLabel.Text = tutorialSteps[1].content
-    contentLabel.TextColor3 = Color3.new(0.3, 0.3, 0.3)
-    contentLabel.TextScaled = true
-    contentLabel.Font = Enum.Font.SourceSans
+    contentLabel.TextColor3 = Color3.fromRGB(44, 62, 80)
+    contentLabel.TextSize = 16
+    contentLabel.Font = Enum.Font.Gotham
     contentLabel.TextWrapped = true
-    contentLabel.Parent = mainFrame
+    contentLabel.TextXAlignment = Enum.TextXAlignment.Left
+    contentLabel.TextYAlignment = Enum.TextYAlignment.Top
+    contentLabel.Parent = contentFrame
 
     -- 步骤指示器
     local stepFrame = Instance.new("Frame")
     stepFrame.Name = "StepIndicator"
     stepFrame.Size = UDim2.new(1, -40, 0, 30)
-    stepFrame.Position = UDim2.new(0, 20, 0, 280)
+    stepFrame.Position = UDim2.new(0, 20, 0, 350)
     stepFrame.BackgroundTransparency = 1
     stepFrame.Parent = mainFrame
 
@@ -157,36 +194,89 @@ local function createTutorialGUI()
     -- 按钮
     local nextButton = Instance.new("TextButton")
     nextButton.Name = "NextButton"
-    nextButton.Size = UDim2.new(0, 120, 0, 40)
-    nextButton.Position = UDim2.new(1, -140, 1, -60)
-    nextButton.BackgroundColor3 = Color3.new(0.2, 0.6, 1)
+    nextButton.Size = UDim2.new(0, 130, 0, 50)
+    nextButton.Position = UDim2.new(1, -150, 1, -70)
+    nextButton.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
     nextButton.BorderSizePixel = 0
     nextButton.Text = tutorialSteps[1].buttonText
     nextButton.TextColor3 = Color3.new(1, 1, 1)
-    nextButton.TextScaled = true
-    nextButton.Font = Enum.Font.SourceSansBold
+    nextButton.TextSize = 18
+    nextButton.Font = Enum.Font.GothamSemibold
     nextButton.Parent = mainFrame
 
+    -- 按钮阴影
+    local btnShadow = Instance.new("Frame")
+    btnShadow.Name = "ButtonShadow"
+    btnShadow.Size = UDim2.new(1, 4, 1, 4)
+    btnShadow.Position = UDim2.new(0, -2, 0, 2)
+    btnShadow.BackgroundColor3 = Color3.new(0, 0, 0)
+    btnShadow.BackgroundTransparency = 0.8
+    btnShadow.BorderSizePixel = 0
+    btnShadow.ZIndex = nextButton.ZIndex - 1
+    btnShadow.Parent = nextButton
+
     local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 8)
+    buttonCorner.CornerRadius = UDim.new(0, 12)
     buttonCorner.Parent = nextButton
+
+    local shadowCorner = Instance.new("UICorner")
+    shadowCorner.CornerRadius = UDim.new(0, 12)
+    shadowCorner.Parent = btnShadow
+
+    -- 按钮悬停效果
+    nextButton.MouseEnter:Connect(function()
+        local hoverTween = TweenService:Create(
+            nextButton,
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundColor3 = Color3.fromRGB(39, 174, 96)}
+        )
+        hoverTween:Play()
+    end)
+
+    nextButton.MouseLeave:Connect(function()
+        local hoverTween = TweenService:Create(
+            nextButton,
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundColor3 = Color3.fromRGB(46, 204, 113)}
+        )
+        hoverTween:Play()
+    end)
 
     -- 关闭按钮
     local closeButton = Instance.new("TextButton")
     closeButton.Name = "CloseButton"
-    closeButton.Size = UDim2.new(0, 30, 0, 30)
-    closeButton.Position = UDim2.new(1, -40, 0, 10)
-    closeButton.BackgroundColor3 = Color3.new(0.9, 0.3, 0.3)
+    closeButton.Size = UDim2.new(0, 35, 0, 35)
+    closeButton.Position = UDim2.new(1, -45, 0, 10)
+    closeButton.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
     closeButton.BorderSizePixel = 0
     closeButton.Text = "✕"
     closeButton.TextColor3 = Color3.new(1, 1, 1)
-    closeButton.TextScaled = true
-    closeButton.Font = Enum.Font.SourceSansBold
-    closeButton.Parent = mainFrame
+    closeButton.TextSize = 18
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Parent = titleBg
 
     local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, 15)
+    closeCorner.CornerRadius = UDim.new(0, 17)
     closeCorner.Parent = closeButton
+
+    -- 关闭按钮悬停效果
+    closeButton.MouseEnter:Connect(function()
+        local hoverTween = TweenService:Create(
+            closeButton,
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundColor3 = Color3.fromRGB(192, 57, 43)}
+        )
+        hoverTween:Play()
+    end)
+
+    closeButton.MouseLeave:Connect(function()
+        local hoverTween = TweenService:Create(
+            closeButton,
+            TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {BackgroundColor3 = Color3.fromRGB(231, 76, 60)}
+        )
+        hoverTween:Play()
+    end)
 
     -- 按钮事件
     nextButton.MouseButton1Click:Connect(function()
@@ -224,8 +314,8 @@ local function updateTutorialContent()
     if not tutorialGui then return end
 
     local mainFrame = tutorialGui.Overlay.MainFrame
-    local titleLabel = mainFrame.Title
-    local contentLabel = mainFrame.Content
+    local titleLabel = mainFrame.TitleBackground.Title
+    local contentLabel = mainFrame.ContentFrame.Content
     local nextButton = mainFrame.NextButton
     local stepFrame = mainFrame.StepIndicator
 
@@ -238,7 +328,30 @@ local function updateTutorialContent()
     for i = 1, #tutorialSteps do
         local dot = stepFrame:FindFirstChild("Dot" .. i)
         if dot then
-            dot.BackgroundColor3 = i == currentStep and Color3.new(0.2, 0.6, 1) or Color3.new(0.8, 0.8, 0.8)
+            dot.BackgroundColor3 = i == currentStep and Color3.fromRGB(52, 152, 219) or Color3.fromRGB(189, 195, 199)
+
+            -- 移除旧的高亮效果
+            local oldHighlight = dot:FindFirstChild("Highlight")
+            if oldHighlight then
+                oldHighlight:Destroy()
+            end
+
+            -- 为当前步骤添加高亮效果
+            if i == currentStep then
+                local highlight = Instance.new("Frame")
+                highlight.Name = "Highlight"
+                highlight.Size = UDim2.new(1, 6, 1, 6)
+                highlight.Position = UDim2.new(0, -3, 0, -3)
+                highlight.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
+                highlight.BackgroundTransparency = 0.6
+                highlight.BorderSizePixel = 0
+                highlight.ZIndex = dot.ZIndex - 1
+                highlight.Parent = dot
+
+                local highlightCorner = Instance.new("UICorner")
+                highlightCorner.CornerRadius = UDim.new(0.5, 0)
+                highlightCorner.Parent = highlight
+            end
         end
     end
 end

@@ -39,19 +39,42 @@ function AdminService.isValidAdmin(player: Player): boolean
         end
     end
 
-    -- 缓存过期或不存在，查询API
-    local success, message = DataService.checkAdminPermission(userId)
+    -- 优先检查配置文件中的管理员用户名（立即生效）
+    local SharedModules = game:GetService("ReplicatedStorage"):WaitForChild("SharedModules")
+    local Config = require(SharedModules:WaitForChild("Config"))
+    local defaultAdminUsernames = Config.ADMIN.DEFAULT_ADMIN_USERNAMES or {}
+
+    local isConfigAdmin = false
+    for _, adminUsername in ipairs(defaultAdminUsernames) do
+        if player.Name == adminUsername then
+            isConfigAdmin = true
+            break
+        end
+    end
+
+    local isDataAdmin = false
+    if not isConfigAdmin then
+        -- 只有当配置文件检查不通过时才查询数据库
+        isDataAdmin, _ = DataService.checkAdminPermission(userId)
+    end
+
+    local finalIsAdmin = isConfigAdmin or isDataAdmin
 
     -- 缓存结果
     adminPermissionCache[userId] = {
-        isAdmin = success,
+        isAdmin = finalIsAdmin,
         timestamp = currentTime
     }
 
-    print(success and "✅" or "❌", "[AdminService]", player.Name,
-          success and "管理员权限验证通过" or ("权限验证失败: " .. (message or "未知错误")))
+    if isConfigAdmin then
+        print("✅ [AdminService]", player.Name, "管理员权限验证通过（配置文件）")
+    elseif isDataAdmin then
+        print("✅ [AdminService]", player.Name, "管理员权限验证通过（数据库）")
+    else
+        print("❌ [AdminService]", player.Name, "权限验证失败")
+    end
 
-    return success
+    return finalIsAdmin
 end
 
 -- ==============================================
@@ -130,7 +153,7 @@ local function handleGetAllUsers(player: Player)
         print("👑 [管理员] " .. player.Name .. " 查看了所有用户数据")
     else
         local errorMessage = errorMsg or "无法获取用户数据"
-        warn("❌ [API错误] " .. errorMessage)
+        warn("❌ [数据错误] " .. errorMessage)
 
         -- 检查是否是认证问题
         if errorMsg and string.find(errorMsg, "认证") then
@@ -139,10 +162,10 @@ local function handleGetAllUsers(player: Player)
             return
         end
 
-        -- 如果API不可用，发送详细的错误信息给客户端
-        print("👑 [调试] API不可用，发送错误信息给客户端")
+        -- 如果数据服务不可用，发送错误信息给客户端
+        print("👑 [调试] 数据服务不可用，发送错误信息给客户端")
         local detailedError = string.format(
-            "API连接失败：%s\n\n可能的原因：\n• Node.js API服务器未启动\n• 网络连接问题\n• 管理员权限配置错误\n\n请联系开发者检查服务器状态",
+            "数据加载失败：%s\n\n可能的原因：\n• 数据存储服务异常\n• 网络连接问题\n• 权限配置错误\n\n请稍后重试或联系管理员",
             errorMessage
         )
         Events.Admin.GetAllUsers:FireClient(player, nil, detailedError)
@@ -198,10 +221,10 @@ local function handleGetAllUsers(player: Player)
 
             print("👑 [调试] 发送模拟数据:", mockData)
             -- 先发送一个提示，告知这是模拟数据
-            Events.Admin.GetAllUsers:FireClient(player, nil, "注意：以下为模拟数据（API服务器离线）")
+            Events.Admin.GetAllUsers:FireClient(player, nil, "注意：以下为模拟数据（数据服务离线）")
             wait(0.5)
             Events.Admin.GetAllUsers:FireClient(player, mockData)
-            print("👑 [管理员] " .. player.Name .. " 查看了模拟用户数据（API不可用）")
+            print("👑 [管理员] " .. player.Name .. " 查看了模拟用户数据（数据服务不可用）")
         end)
     end
 end
@@ -213,11 +236,13 @@ local function handleSetUserCoins(player: Player, targetPlayerName: string, newC
         return
     end
 
-    -- 查找目标玩家的ID
+    -- 查找目标玩家的ID和Player对象
     local targetUserId = nil
+    local targetPlayer = nil
     for _, otherPlayer in pairs(Players:GetPlayers()) do
         if otherPlayer.Name == targetPlayerName then
             targetUserId = tostring(otherPlayer.UserId)
+            targetPlayer = otherPlayer
             break
         end
     end
@@ -233,6 +258,20 @@ local function handleSetUserCoins(player: Player, targetPlayerName: string, newC
     if success then
         Events.Admin.SetUserCoins:FireClient(player, true, message)
         print("👑 [管理员操作] " .. player.Name .. " 修改了 " .. targetPlayerName .. " 的金币为 " .. newCoins)
+
+        -- 立即通知目标玩家刷新数据
+        if targetPlayer then
+            print("🔄 [数据同步] 通知 " .. targetPlayerName .. " 刷新数据")
+
+            -- 延迟一点时间确保数据已保存，然后通知目标玩家刷新
+            spawn(function()
+                task.wait(0.2) -- 稍等片刻确保数据已保存
+
+                -- 通过事件触发目标玩家的数据刷新
+                Events.User.RefreshData:FireClient(targetPlayer)
+                print("✅ [数据同步] 已通知 " .. targetPlayerName .. " 刷新数据")
+            end)
+        end
     else
         Events.Admin.SetUserCoins:FireClient(player, false, message or "修改失败")
     end
@@ -393,8 +432,49 @@ local function handleManageUserMembership(player: Player, requestData)
 
     Events.Admin.ManageUserMembership:FireClient(player, success, response)
 
-    if success then
+    if success and response and response.success then
         print("👑 [管理员] " .. player.Name .. " 管理了用户会员状态")
+
+        -- 实时更新目标用户的状态（如果该用户在线）
+        local targetPlayerName = requestData.playerName or requestData.username
+        if targetPlayerName then
+            -- 查找在线的目标玩家
+            for _, targetPlayer in pairs(Players:GetPlayers()) do
+                if targetPlayer.Name == targetPlayerName then
+                    print("🔄 [实时更新] 为在线用户", targetPlayerName, "更新会员状态")
+
+                    -- 异步刷新目标用户的数据并通知状态变更
+                    local UserService = require(script.Parent:WaitForChild("UserService"))
+                    spawn(function()
+                        -- 先清除目标用户的会员缓存
+                        local UserDataService = require(script.Parent:WaitForChild("UserDataService"))
+                        if UserDataService.clearMembershipCache then
+                            UserDataService.clearMembershipCache(tostring(targetPlayer.UserId))
+                            print("🧹 [实时更新] 已清除", targetPlayerName, "的会员缓存")
+                        end
+
+                        -- 等待短暂时间确保数据保存完成
+                        task.wait(0.2)
+
+                        -- 刷新用户数据
+                        UserService.refreshPlayerData(targetPlayer)
+
+                        -- 发送会员状态变更通知
+                        if Events.User.MembershipStatusChanged then
+                            task.wait(0.1) -- 再等待一点确保数据刷新完成
+                            Events.User.MembershipStatusChanged:FireClient(targetPlayer, {
+                                action = requestData.action,
+                                success = true,
+                                message = "您的会员状态已由管理员更新",
+                                admin = player.Name
+                            })
+                            print("📤 [实时更新] 已通知", targetPlayerName, "会员状态变更")
+                        end
+                    end)
+                    break
+                end
+            end
+        end
     else
         print("❌ [错误] " .. player.Name .. " 管理用户会员失败")
     end

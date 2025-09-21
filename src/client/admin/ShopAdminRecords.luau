@@ -113,7 +113,16 @@ function ShopAdminRecords.showPlayerRecords(playerName, records, screenGui)
 
             -- 时间戳
             local timeLabel = Instance.new("TextLabel")
-            timeLabel.Text = ShopUtils.formatTimestamp(record.timestamp or record.createdAt)
+
+            -- 调试时间戳问题
+            local timestamp = record.timestamp or record.createdAt or record.transactionDate
+            print("📊 [AdminRecords调试] 交易记录时间戳:",
+                "timestamp=", record.timestamp,
+                "createdAt=", record.createdAt,
+                "transactionDate=", record.transactionDate,
+                "使用=", timestamp)
+
+            timeLabel.Text = ShopUtils.formatTimestamp(timestamp)
             timeLabel.Font = Enum.Font.SourceSans
             timeLabel.TextSize = 12
             timeLabel.TextColor3 = ShopUtils.COLORS.TEXT_MUTED
@@ -134,6 +143,8 @@ function ShopAdminRecords.showPlayerRecords(playerName, records, screenGui)
                 actionText = "⚙️ 管理员操作 x" .. (record.quantity or 1)
             elseif record.type == "daily_reward" then
                 actionText = "🎁 每日奖励 x" .. (record.quantity or 1)
+            elseif record.type == "membership_purchase" then
+                actionText = "💎 购买会员 " .. (record.itemName or record.item_name or "未知会员") .. " x" .. (record.quantity or 1)
             end
             actionLabel.Text = actionText
             actionLabel.Font = Enum.Font.SourceSansBold
@@ -156,11 +167,23 @@ function ShopAdminRecords.showPlayerRecords(playerName, records, screenGui)
                 amountText = "+" .. (record.totalAmount or record.totalEarned or record.total_amount or 0) .. " 金币"
                 amountColor = ShopUtils.COLORS.SUCCESS
             elseif record.type == "admin" or record.action == "admin_edit" then
-                amountText = (record.totalAmount or record.total_amount or 0) .. " 金币"
-                amountColor = ShopUtils.COLORS.TEXT_PRIMARY
+                local coinChange = record.totalAmount or record.total_amount or 0
+                if coinChange > 0 then
+                    amountText = "+" .. coinChange .. " 金币"
+                    amountColor = ShopUtils.COLORS.SUCCESS
+                elseif coinChange < 0 then
+                    amountText = coinChange .. " 金币"  -- 负数已经包含减号
+                    amountColor = ShopUtils.COLORS.ERROR
+                else
+                    amountText = "0 金币"
+                    amountColor = ShopUtils.COLORS.TEXT_MUTED
+                end
             elseif record.type == "daily_reward" then
                 amountText = "+" .. (record.totalAmount or record.total_amount or 0) .. " 金币"
                 amountColor = ShopUtils.COLORS.SUCCESS
+            elseif record.type == "membership_purchase" then
+                amountText = "-" .. (record.totalAmount or record.totalCost or record.total_amount or 0) .. " 金币"
+                amountColor = ShopUtils.COLORS.ERROR
             end
             amountLabel.Text = amountText
             amountLabel.Font = Enum.Font.SourceSansBold

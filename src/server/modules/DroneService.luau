@@ -421,14 +421,17 @@ local function findNearestTarget(dronePosition, attackRange, ownerPlayer)
     -- 优先查找靶子（在Workspace.Targets文件夹中）
     local targetsFolder = workspace:FindFirstChild("Targets")
     if targetsFolder then
-        for _, target in pairs(targetsFolder:GetChildren()) do
-            -- 检查靶子是否是有效的Part并且没有被隐藏（透明度为0表示可见）
-            if target:IsA("Part") and target.Parent == targetsFolder and target.Transparency == 0 then
-                local distance = (target.Position - dronePosition).Magnitude
-                if distance < nearestDistance then
-                    nearestTarget = target
-                    nearestDistance = distance
-                    targetType = "target"
+        for _, targetModel in pairs(targetsFolder:GetChildren()) do
+            -- 检查靶子是否是有效的Model并且有活跃的Base部件
+            if targetModel:IsA("Model") then
+                local basePart = targetModel:FindFirstChild("Base")
+                if basePart and basePart:IsA("Part") and basePart.Transparency == 0 then
+                    local distance = (basePart.Position - dronePosition).Magnitude
+                    if distance < nearestDistance then
+                        nearestTarget = basePart  -- 返回Base部件作为攻击目标
+                        nearestDistance = distance
+                        targetType = "target"
+                    end
                 end
             end
         end
@@ -487,7 +490,8 @@ local function attackTarget(drone, target, targetType)
     if targetType == "target" then
         -- 检查靶子是否还在Targets文件夹中并且可见（透明度为0表示可见，透明度为1表示隐藏）
         local targetsFolder = workspace:FindFirstChild("Targets")
-        if not targetsFolder or not target.Parent or target.Parent ~= targetsFolder or target.Transparency == 1 then
+        local targetModel = target.Parent
+        if not targetsFolder or not targetModel or targetModel.Parent ~= targetsFolder or target.Transparency == 1 then
             log("目标靶子已消失或被隐藏，取消攻击")
             return false
         end
@@ -519,17 +523,10 @@ local function attackTarget(drone, target, targetType)
 
     -- 根据目标类型处理伤害
     if targetType == "target" then
-        -- 攻击靶子 - 通过RemoteEvent发送给TargetService处理
-        local targetId = target.Name
+        -- 攻击靶子 - 通过TargetService处理
+        local targetModel = target.Parent  -- target是Base部件，其父级是Model
+        local targetId = targetModel.Name
         local ownerName = drone.Owner.Value.Name
-
-        -- 创建一个RemoteEvent来处理靶子伤害
-        local damageTargetEvent = ReplicatedStorage:FindFirstChild("DamageTarget")
-        if not damageTargetEvent then
-            damageTargetEvent = Instance.new("RemoteEvent")
-            damageTargetEvent.Name = "DamageTarget"
-            damageTargetEvent.Parent = ReplicatedStorage
-        end
 
         -- 直接在服务端处理靶子伤害 - 获取TargetService
         local success, TargetService = pcall(function()
@@ -538,14 +535,14 @@ local function attackTarget(drone, target, targetType)
 
         if success and TargetService then
             local destroyed = TargetService.damageTarget(targetId, DroneConfig.DRONE.ATTACK_DAMAGE, ownerName)
-            log("攻击靶子:", targetId, "造成伤害:", DroneConfig.DRONE.ATTACK_DAMAGE, destroyed and "(被摧毁)" or "")
+            log("🔥 无人机攻击靶子:", targetId, "造成伤害:", DroneConfig.DRONE.ATTACK_DAMAGE, destroyed and "(被摧毁)" or "")
 
             -- 如果靶子被摧毁，创建爆炸效果
             if destroyed then
                 createExplosionEffect(targetPos)
             end
         else
-            log("无法获取TargetService来处理靶子伤害")
+            log("❌ 无法获取TargetService来处理靶子伤害")
         end
     else
         -- 攻击玩家或NPC
@@ -809,8 +806,9 @@ local function mainLoop()
                     droneData.lastAttackTime = currentTime
 
                     -- 通知客户端攻击事件
-                    local targetName = targetType == "target" and target.Name or target.Name
+                    local targetName = targetType == "target" and (target.Parent and target.Parent.Name or target.Name) or target.Name
                     Events.Drone.DroneAttack:FireClient(player, targetName)
+                    log("✅ 无人机攻击成功：类型=" .. targetType .. ", 目标=" .. targetName)
                 else
                     -- 攻击失败，可能是目标已消失，重置攻击时间以便立即寻找新目标
                     droneData.lastAttackTime = currentTime - DroneConfig.DRONE.ATTACK_INTERVAL + 0.1

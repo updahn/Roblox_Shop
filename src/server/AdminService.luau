@@ -19,61 +19,44 @@ local AdminService = {}
 
 -- 管理员配置缓存
 local adminCache = {
-    usernames = {},
-    lastUpdate = 0,
-    cacheDuration = 300 -- 5分钟缓存
+    localUsernames = {},        -- 本地配置的管理员
+    lastUpdate = 0
 }
 
 --[[
-从API加载管理员配置
+从本地配置加载管理员
 @return boolean - 是否成功加载
 --]]
-local function loadAdminConfigFromAPI()
-    local success, result = pcall(function()
-        local response = HttpService:GetAsync(Config.getApiUrl("/config"))
-        return HttpService:JSONDecode(response)
-    end)
+local function loadLocalAdminConfig()
+    -- 从Config中获取默认管理员用户名
+    adminCache.localUsernames = Config.ADMIN.DEFAULT_ADMIN_USERNAMES or {}
 
-    if success and result and result.success then
-        local adminConfig = result.data and result.data.admin
-        if adminConfig and adminConfig.usernames then
-            adminCache.usernames = adminConfig.usernames
-            adminCache.lastUpdate = tick()
+    Config.log("INFO", "本地管理员配置已加载", {
+        usernames = adminCache.localUsernames,
+        count = #adminCache.localUsernames
+    })
 
-            Config.log("INFO", "管理员配置已从API加载", {
-                usernames = adminConfig.usernames,
-                count = #adminConfig.usernames
-            })
-            return true
-        end
-    else
-        Config.log("ERROR", "加载管理员配置失败", {
-            success = success,
-            result = result
-        })
-    end
-
-    return false
+    return true
 end
+
+-- API相关功能已删除
+
+-- combineAdminUsernames 已删除，直接使用本地管理员配置
 
 --[[
 确保管理员配置已加载
 @return boolean - 配置是否可用
 --]]
 local function ensureAdminConfigLoaded()
-    local currentTime = tick()
+    -- 加载本地配置
+    loadLocalAdminConfig()
 
-    -- 如果缓存过期或为空，尝试重新加载
-    if currentTime - adminCache.lastUpdate > adminCache.cacheDuration or #adminCache.usernames == 0 then
-        print("🔄 [调试] 管理员配置缓存过期，尝试重新加载")
-        if loadAdminConfigFromAPI() then
-            print("✅ [调试] 管理员配置重新加载成功")
-        else
-            print("❌ [调试] 管理员配置重新加载失败，使用现有缓存")
-        end
+    print("✅ [调试] 管理员配置加载完成，总计:", #adminCache.localUsernames, "个管理员")
+    if #adminCache.localUsernames > 0 then
+        print("📋 [调试] 管理员列表:", table.concat(adminCache.localUsernames, ", "))
     end
 
-    return #adminCache.usernames > 0
+    return #adminCache.localUsernames > 0
 end
 
 --[[
@@ -93,8 +76,9 @@ function AdminService.isPlayerAdminLocal(player)
     end
 
     -- 检查玩家名是否在管理员列表中
-    for _, adminName in pairs(adminCache.usernames) do
+    for _, adminName in pairs(adminCache.localUsernames) do
         if player.Name == adminName then
+            print("✅ [调试] 玩家", player.Name, "通过用户名匹配确认为管理员")
             return true
         end
     end
@@ -132,8 +116,19 @@ end
 --]]
 function AdminService.getAdminUsernames()
     ensureAdminConfigLoaded()
-    return adminCache.usernames
+    return adminCache.localUsernames
 end
+
+--[[
+获取本地配置的管理员用户名列表
+@return table - 本地管理员用户名数组
+--]]
+function AdminService.getLocalAdminUsernames()
+    return adminCache.localUsernames or {}
+end
+
+-- API功能已删除
+-- getApiAdminUsernames 已删除
 
 --[[
 手动刷新管理员配置缓存
@@ -170,13 +165,7 @@ if Events.Admin.CheckPermission then
 
         -- 优先使用本地缓存进行快速检查，完全避免HTTP请求阻塞RemoteFunction
         local success, result = pcall(function()
-            -- 确保本地缓存已加载，如果没有则尝试快速加载
-            if #adminCache.usernames == 0 and tick() - adminCache.lastUpdate > 2 then
-                -- 使用非阻塞方式尝试快速加载
-                spawn(function()
-                    loadAdminConfigFromAPI()
-                end)
-            end
+            -- 直接使用本地配置
 
             return AdminService.isPlayerAdminLocal(player)
         end)
@@ -184,18 +173,7 @@ if Events.Admin.CheckPermission then
         if success then
             print("✅ [调试] 权限查询完成:", player.Name, "结果:", result)
 
-            -- 如果本地缓存为空或过期，异步刷新缓存（不阻塞当前请求）
-            if #adminCache.usernames == 0 or tick() - adminCache.lastUpdate > adminCache.cacheDuration then
-                spawn(function()
-                    print("🔄 [调试] 异步刷新管理员配置缓存")
-                    loadAdminConfigFromAPI()
-
-                    -- 重新检查该玩家权限
-                    if AdminService.isPlayerAdminLocal(player) then
-                        print("✅ [调试] 异步更新后确认", player.Name, "为管理员")
-                    end
-                end)
-            end
+            -- 本地管理员配置，无需异步刷新
 
             return result
         else
@@ -214,28 +192,24 @@ spawn(function()
     wait(2) -- 等待游戏完全加载
     print("🚀 [调试] 开始初始化 AdminService...")
 
-    -- 多次尝试加载管理员配置
-    local loadAttempts = 0
-    local maxAttempts = 5
+    -- 首先加载本地配置
+    print("📋 [调试] 加载本地管理员配置...")
+    loadLocalAdminConfig()
 
-    while loadAttempts < maxAttempts do
-        loadAttempts = loadAttempts + 1
-        print("🔄 [调试] 尝试加载管理员配置 (第" .. loadAttempts .. "/" .. maxAttempts .. "次)")
+    -- 直接使用本地配置，无API配置
+    adminCache.lastUpdate = tick()
 
-        if loadAdminConfigFromAPI() then
-            print("✅ [调试] 管理员配置加载成功，当前管理员列表:")
-            for i, username in pairs(adminCache.usernames) do
-                print("  " .. i .. ": " .. tostring(username))
-            end
-            break
-        else
-            print("❌ [调试] 管理员配置加载失败，等待2秒后重试...")
-            wait(2)
+    print("✅ [调试] 管理员配置初始化完成")
+    print("📊 [调试] 配置统计:")
+    print("  • 管理员:", #adminCache.localUsernames, "个")
+
+    if #adminCache.localUsernames > 0 then
+        print("📋 [调试] 当前管理员列表:")
+        for i, username in pairs(adminCache.localUsernames) do
+            print("  " .. i .. ": " .. tostring(username))
         end
-    end
-
-    if #adminCache.usernames == 0 then
-        print("⚠️ [调试] 无法从API加载管理员配置，将依赖数据库首次创建用户时的管理员设置")
+    else
+        print("⚠️ [调试] 没有配置任何管理员，请在Config.ADMIN.DEFAULT_ADMIN_USERNAMES中添加管理员用户名")
     end
 
     print("🚀 [调试] AdminService 初始化完成")

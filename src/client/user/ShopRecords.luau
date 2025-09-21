@@ -320,7 +320,7 @@ function ShopRecords.handleAdminHistoryResponse(success, message, data)
     print("📊 [管理员记录] 收到用户历史记录响应:", success, message)
 
     if success and data and data.transactions then
-        -- 将API响应转换为与普通交易记录兼容的格式
+        -- 将数据响应转换为与普通交易记录兼容的格式
         local formattedData = {
             transactions = {}
         }

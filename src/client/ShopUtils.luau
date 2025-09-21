@@ -169,8 +169,24 @@ function ShopUtils.formatTimestamp(timestamp)
         return "未知时间"
     end
 
-    -- 如果是ISO格式的时间戳，尝试解析
+    -- 如果是数字时间戳(Unix timestamp)，转换为可读格式
+    if type(timestamp) == "number" then
+        -- 检查时间戳是否合理 (避免显示1970年或未来很远的时间)
+        if timestamp > 0 and timestamp < 4102444800 then -- 2100年前
+            return os.date("%Y-%m-%d %H:%M", timestamp)
+        else
+            return "无效时间"
+        end
+    end
+
+    -- 如果是字符串，尝试不同的解析方式
     if type(timestamp) == "string" then
+        -- 尝试转换为数字时间戳
+        local numTimestamp = tonumber(timestamp)
+        if numTimestamp and numTimestamp > 0 and numTimestamp < 4102444800 then
+            return os.date("%Y-%m-%d %H:%M", numTimestamp)
+        end
+
         -- 处理 MySQL 格式的时间戳 (YYYY-MM-DD HH:MM:SS)
         local year, month, day, hour, min, sec = timestamp:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
         if year then
@@ -182,19 +198,34 @@ function ShopUtils.formatTimestamp(timestamp)
         if isoYear then
             return string.format("%s-%s-%s %s:%s", isoYear, isoMonth, isoDay, isoHour, isoMin)
         end
+
+        -- 处理日期格式 (YYYY-MM-DD)
+        local dateYear, dateMonth, dateDay = timestamp:match("(%d+)-(%d+)-(%d+)")
+        if dateYear then
+            return string.format("%s-%s-%s", dateYear, dateMonth, dateDay)
+        end
+
+        -- 如果无法解析，返回原始字符串的前19个字符（通常是时间部分）
+        if #timestamp > 19 then
+            return timestamp:sub(1, 19)
+        end
+
+        -- 如果长度合适，直接返回
+        if #timestamp > 0 then
+            return timestamp
+        end
     end
 
-    -- 如果无法解析，返回原始字符串的前19个字符（通常是时间部分）
-    local str = tostring(timestamp)
-    if #str > 19 then
-        return str:sub(1, 19)
-    end
-
-    return str
+    return "格式错误"
 end
 
 -- 显示通知
 function ShopUtils.showNotification(message, isSuccess, screenGui)
+    if not screenGui then
+        warn("ShopUtils.showNotification: screenGui参数为空")
+        return
+    end
+
     local notification = Instance.new("Frame")
     notification.Name = "Notification"
     notification.Size = UDim2.new(0, 400, 0, 80)
@@ -206,7 +237,7 @@ function ShopUtils.showNotification(message, isSuccess, screenGui)
     ShopUtils.createCorner(notification, 12)
 
     local text = Instance.new("TextLabel")
-    text.Text = message
+    text.Text = tostring(message) -- 确保message是字符串
     text.Font = Enum.Font.SourceSansBold
     text.TextSize = 18
     text.TextColor3 = ShopUtils.COLORS.TEXT_PRIMARY
@@ -222,22 +253,32 @@ function ShopUtils.showNotification(message, isSuccess, screenGui)
     })
     showTween:Play()
 
-    wait(3)
+    -- 使用spawn来避免阻塞主线程
+    spawn(function()
+        wait(3)
 
-    local hideTween = TweenService:Create(notification, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
-        Position = UDim2.new(0.5, -200, 0, -100)
-    })
-    hideTween:Play()
+        if notification and notification.Parent then
+            local hideTween = TweenService:Create(notification, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+                Position = UDim2.new(0.5, -200, 0, -100)
+            })
+            hideTween:Play()
 
-    hideTween.Completed:Connect(function()
-        notification:Destroy()
+            hideTween.Completed:Connect(function()
+                if notification and notification.Parent then
+                    notification:Destroy()
+                end
+            end)
+        end
     end)
 
-    -- if isSuccess then
-    --     ShopUtils.SOUNDS.success:Play()
-    -- else
-    --     ShopUtils.SOUNDS.error:Play()
-    -- end
+    -- 播放音效（如果可用）
+    pcall(function()
+        if isSuccess and ShopUtils.SOUNDS.success then
+            ShopUtils.SOUNDS.success:Play()
+        elseif not isSuccess and ShopUtils.SOUNDS.error then
+            ShopUtils.SOUNDS.error:Play()
+        end
+    end)
 end
 
 return ShopUtils

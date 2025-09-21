@@ -15,9 +15,9 @@
 ### 技术特色
 
 - 📱 **模块化架构** - 清晰的代码结构和组件分离
-- 🔒 **安全认证** - JWT token 验证和权限管理
+- 🔒 **安全认证** - 权限验证和管理员权限控制
 - ⚡ **高性能** - 缓存机制和异步操作优化
-- 🌐 **RESTful API** - 标准化的后端接口设计
+- 🌐 **数据存储** - 基于 Roblox DataStore 的数据管理
 - 🛡️ **错误处理** - 完善的异常捕获和用户反馈
 
 ## 目录结构
@@ -89,19 +89,19 @@ src/
 | 文件名                | 功能描述       | 技术特点                        |
 | --------------------- | -------------- | ------------------------------- |
 | **AdminService.luau** | 管理员服务逻辑 | 👮 权限验证、操作审计、安全控制 |
-| **DataService.luau**  | 数据处理服务   | 📊 API 调用、数据验证、错误处理 |
+| **DataService.luau**  | 数据处理服务   | 📊 数据操作、数据验证、错误处理 |
 | **UserService.luau**  | 用户服务管理   | 👤 用户认证、状态管理、行为分析 |
 
 ### 🌐 共享脚本模块 (shared/)
 
 共享脚本在客户端和服务端都可使用，提供通用功能和配置。
 
-| 文件名                  | 功能描述       | 使用场景                         |
-| ----------------------- | -------------- | -------------------------------- |
-| **Config.luau**         | 系统配置中心   | ⚙️ API 地址、界面主题、业务参数  |
-| **Events.luau**         | 远程事件定义   | 🌉 客户端-服务端通信桥梁         |
-| **ShopData.luau**       | 商店数据管理   | 📦 商品信息、价格策略、库存同步  |
-| **ShopDataClient.luau** | 客户端数据接口 | 🔗 HTTP 请求、本地缓存、状态同步 |
+| 文件名                  | 功能描述       | 使用场景                        |
+| ----------------------- | -------------- | ------------------------------- |
+| **Config.luau**         | 系统配置中心   | ⚙️ 系统设置、界面主题、业务参数 |
+| **Events.luau**         | 远程事件定义   | 🌉 客户端-服务端通信桥梁        |
+| **ShopData.luau**       | 商店数据管理   | 📦 商品信息、价格策略、库存同步 |
+| **ShopDataClient.luau** | 客户端数据接口 | 🔗 数据请求、本地缓存、状态同步 |
 
 ## 🚀 快速开始指南
 
@@ -112,7 +112,7 @@ src/
 ```bash
 # 1. 在Roblox Studio中创建新的Place
 # 2. 确保Studio版本为最新
-# 3. 启用HttpService (Game Settings → Security → Allow HTTP Requests)
+# 3. 确保 DataStore 服务可用
 ```
 
 #### 1.2 脚本目录映射
@@ -158,18 +158,18 @@ Roblox Studio 结构映射：
 
 ### ⚙️ 第二步：配置系统参数
 
-#### 2.1 API 服务器配置
+#### 2.1 DataStore 配置
 
 编辑 `ReplicatedStorage/SharedModules/Config.luau`：
 
 ```lua
--- 🌐 API服务器配置
-API_CONFIG = {
-    -- 生产环境（替换为你的域名）
-    BASE_URL = "https://your-shop-api.com/api",
+-- 🌐 数据存储配置
+DATASTORE_CONFIG = {
+    -- DataStore 名称
+    MAIN_STORE = "ShopData_v1",
 
-    -- 开发环境
-    -- BASE_URL = "http://localhost:3001/api",
+    -- 玩家数据 DataStore
+    PLAYER_STORE = "PlayerData_v1",
 
     -- 超时设置（秒）
     TIMEOUT = 10,
@@ -239,7 +239,7 @@ local function testBasicFunctions()
         game.ReplicatedStorage.SharedModules.Config)
     print("📦 Config模块:", success1 and "✅ 成功" or "❌ 失败")
 
-    -- 测试API连接
+    -- 测试数据连接
     local success2, shopData = pcall(require,
         game.ReplicatedStorage.SharedModules.ShopData)
     print("🌐 ShopData模块:", success2 and "✅ 成功" or "❌ 失败")
@@ -253,21 +253,23 @@ end
 testBasicFunctions()
 ```
 
-#### 3.2 API 连接测试
+#### 3.2 数据服务测试
 
 ```lua
--- 测试后端API连接
-local ShopData = require(game.ReplicatedStorage.SharedModules.ShopData)
+-- 测试数据服务连接
+local ShopDataClient = require(game.ReplicatedStorage.SharedModules.ShopDataClient)
 
 spawn(function()
-    local success, response = ShopData.testConnection()
-    if success then
-        print("🌐 API连接测试: ✅ 成功")
-        print("📊 服务器信息:", response)
-    else
-        warn("🌐 API连接测试: ❌ 失败")
-        warn("🔍 请检查API服务器是否正常运行")
-    end
+    wait(2) -- 等待系统初始化
+    ShopDataClient.getPlayerData(function(data)
+        if data then
+            print("🌐 数据服务测试: ✅ 成功")
+            print("📊 玩家数据:", data)
+        else
+            warn("🌐 数据服务测试: ❌ 失败")
+            warn("🔍 请检查数据存储服务是否正常")
+        end
+    end)
 end)
 ```
 
@@ -357,7 +359,7 @@ ShopEvents.NewFeatureEvent:FireServer(data)
 
 ### 数据管理
 
-使用`shared/ShopData.luau`进行 API 调用：
+使用`shared/ShopData.luau`进行数据操作：
 
 ```lua
 local ShopData = require(ReplicatedStorage.ShopData)
@@ -403,7 +405,7 @@ end
 
 ### 1. 缓存数据
 
-- 使用本地缓存减少 API 调用
+- 使用本地缓存减少数据操作
 - 实现数据预加载
 
 ### 2. UI 优化
@@ -413,14 +415,14 @@ end
 
 ### 3. 网络优化
 
-- 批量处理 API 请求
+- 批量处理数据请求
 - 实现请求去重
 
 ## 常见问题
 
-### Q: API 请求失败怎么办？
+### Q: 数据操作失败怎么办？
 
-A: 检查`Config.luau`中的 API 地址是否正确，确保后端服务正常运行。
+A: 检查 DataStore 服务是否可用，确保游戏已发布且 DataStore 配置正确。
 
 ### Q: 如何添加新的管理员？
 

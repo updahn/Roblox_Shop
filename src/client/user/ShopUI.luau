@@ -105,8 +105,12 @@ function ShopUI.showQuantityDialog(itemId, action, item)
 
     -- 商品信息
     local itemInfo = Instance.new("TextLabel")
-    local sellPrice = math.floor(item.price * 0.8) -- 使用默认sell rate
-    itemInfo.Text = "📦 " .. item.name .. "\n💰 " .. (action == "buy" and item.price or sellPrice) .. " 金币/个"
+    -- 安全地计算卖出价格
+    local sellPrice = 0
+    if item.price and type(item.price) == "number" and item.price > 0 then
+        sellPrice = math.max(1, math.floor(item.price * 0.8)) -- 使用默认sell rate，确保至少为1
+    end
+    itemInfo.Text = "📦 " .. tostring(item.name or "未知商品") .. "\n💰 " .. (action == "buy" and (item.price or 0) or sellPrice) .. " 金币/个"
     itemInfo.Font = Enum.Font.SourceSans
     itemInfo.TextSize = 16
     itemInfo.TextColor3 = ShopUtils.COLORS.TEXT_SECONDARY
@@ -174,12 +178,18 @@ function ShopUI.showQuantityDialog(itemId, action, item)
     end
 
     local function updateQuantity(newQuantity)
-        currentQuantity = math.max(1, math.min(maxQuantity, newQuantity))
+        currentQuantity = math.max(1, math.min(maxQuantity or 1, newQuantity))
         quantityBox.Text = tostring(currentQuantity)
 
-        local sellPrice = math.floor(item.price * 0.8) -- 使用默认sell rate
-        local totalPrice = currentQuantity * (action == "buy" and item.price or sellPrice)
-        itemInfo.Text = "📦 " .. item.name .. "\n💰 总计: " .. totalPrice .. " 金币"
+        -- 安全地计算价格
+        local sellPrice = 0
+        if item.price and type(item.price) == "number" and item.price > 0 then
+            sellPrice = math.max(1, math.floor(item.price * 0.8))
+        end
+
+        local unitPrice = action == "buy" and (item.price or 0) or sellPrice
+        local totalPrice = currentQuantity * unitPrice
+        itemInfo.Text = "📦 " .. tostring(item.name or "未知商品") .. "\n💰 总计: " .. totalPrice .. " 金币"
     end
 
     minusButton.MouseButton1Click:Connect(function()
@@ -675,8 +685,16 @@ function ShopUI.connectEvents()
     -- 获取玩家数据响应
     eventConnections.getPlayerData = ShopEvents.User.GetPlayerData.OnClientEvent:Connect(function(data)
         if data then
+            local oldCoins = playerData and playerData.coins or 0
             playerData = data
-            print("✅ [数据同步] 玩家数据已更新 | 金币: " .. (data.coins or 0))
+            print("✅ [数据同步] 玩家数据已更新 | 金币: " .. (data.coins or 0) .. " (之前: " .. oldCoins .. ")")
+
+            -- 如果金币发生变化，显示通知
+            if oldCoins ~= data.coins then
+                local coinDiff = data.coins - oldCoins
+                local message = coinDiff > 0 and "💰 金币增加 +" .. coinDiff or "💰 金币减少 " .. coinDiff
+                print("💰 [金币变化] " .. message)
+            end
 
             -- 更新会员状态
             ShopUI.updateMembershipStatus()
@@ -725,11 +743,29 @@ function ShopUI.connectEvents()
         if success then
             playerData = newData
 
+            -- 检查是否购买了会员商品（通过消息或其他方式判断）
+            local isMembershipPurchase = message and (message:find("会员") or message:find("membership"))
+
+            if isMembershipPurchase then
+                print("🎯 [购买] 检测到会员商品购买，特殊处理状态更新")
+
+                -- 延迟一点时间确保服务端数据完全同步
+                task.wait(0.2)
+
+                -- 强制刷新数据
+                ShopEvents.User.RefreshData:FireServer()
+
+                -- 再次等待数据刷新
+                task.wait(0.1)
+            end
+
             -- 立即更新会员状态（特别是购买会员商品后）
             ShopUI.updateMembershipStatus()
 
             -- 刷新商店数据
-            ShopEvents.User.RefreshData:FireServer()
+            if not isMembershipPurchase then
+                ShopEvents.User.RefreshData:FireServer()
+            end
             ShopUI.updateUI()
 
             ShopUtils.showNotification("✅ " .. message, true, screenGui)
@@ -766,6 +802,21 @@ function ShopUI.connectEvents()
         end
     end)
 
+    -- 会员状态变更通知
+    eventConnections.membershipStatusChanged = ShopEvents.User.MembershipStatusChanged.OnClientEvent:Connect(function(statusData)
+        if statusData and statusData.success then
+            print("🔄 [会员状态] 收到状态变更通知:", statusData.message)
+
+            -- 显示通知
+            if statusData.message then
+                ShopUtils.showNotification("✅ " .. statusData.message, true, screenGui)
+            end
+
+            -- 立即刷新玩家数据
+            ShopEvents.User.GetPlayerData:FireServer()
+        end
+    end)
+
     eventConnections.getPlayerPurchaseHistory = ShopEvents.Admin.GetUserHistory.OnClientEvent:Connect(function(success, message, data)
         print("📊 [ShopUI] GetUserHistory事件响应:", success, message, data and "有数据" or "无数据")
 
@@ -778,6 +829,18 @@ function ShopUI.connectEvents()
             -- 当成功时，使用统一的处理函数
             ShopRecords.handleAdminHistoryResponse(success, message, data)
         end
+    end)
+
+    -- 数据刷新请求
+    eventConnections.refreshData = ShopEvents.User.RefreshData.OnClientEvent:Connect(function()
+        print("🔄 [数据刷新] 收到服务端刷新请求")
+        if playerData then
+            print("🔄 [数据刷新] 当前金币:", playerData.coins)
+        end
+        -- 立即请求最新数据
+        ShopEvents.User.GetPlayerData:FireServer()
+        ShopEvents.User.GetShopData:FireServer()
+        print("🔄 [数据刷新] 已发送数据请求")
     end)
 
     -- 用户交易记录响应

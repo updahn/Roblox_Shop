@@ -87,7 +87,7 @@ DroneConfig.MODEL = {
 
 DroneConfig.SOUNDS = {
     SPAWN = "rbxasset://sounds/electronicpingshort.wav",
-    ATTACK = "rbxasset://sounds/impact_punch.mp3", -- 使用punch音效替代generic
+    ATTACK = "rbxasset://sounds/impact_generic.mp3", -- 使用通用撞击音效
     DESTROY = "rbxasset://sounds/snap.wav",
     HOVER = "rbxasset://sounds/ambient.ogg",
     VOLUME = {

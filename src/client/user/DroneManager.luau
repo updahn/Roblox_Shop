@@ -141,10 +141,11 @@ local function updateButtonStates()
 end
 
 local function createDroneUI()
-    -- 创建ScreenGui
+    -- 创建ScreenGui（但设置为隐藏状态）
     screenGui = Instance.new("ScreenGui")
     screenGui.Name = "DroneUI"
     screenGui.ResetOnSpawn = false
+    screenGui.Enabled = false  -- 隐藏UI
     screenGui.Parent = playerGui
 
     -- 主框架
@@ -319,7 +320,14 @@ function DroneManager.init()
         end
     end)
 
-    log("无人机管理器已初始化")
+    -- 初始化无人机管理器（已禁用）
+function DroneManager.initialize()
+    log("无人机管理器已禁用，不创建UI界面")
+    -- 完全禁用无人机功能以避免界面混乱
+    return
+end
+
+log("无人机管理器初始化函数已禁用")
 end
 
 function DroneManager.cleanup()

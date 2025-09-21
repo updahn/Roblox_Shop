@@ -46,7 +46,7 @@ local function triggerCallbacks(callbackType, ...)
     end
 end
 
--- 客户端API接口
+-- 客户端数据接口
 
 -- 获取玩家数据（异步）
 function ShopDataClient.getPlayerData(callback)

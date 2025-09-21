@@ -42,15 +42,51 @@ function TargetService.createTarget(position)
     }
 
     -- 创建靶子模型
+    local targetModel = Instance.new("Model")
+    targetModel.Name = targetId
+    targetModel.Parent = targetsFolder
+
+    -- 主体部分
     local targetPart = Instance.new("Part")
-    targetPart.Name = targetId
+    targetPart.Name = "Base"
     targetPart.Size = DroneConfig.TARGETS.APPEARANCE.SIZE
     targetPart.Position = position
     targetPart.Material = DroneConfig.TARGETS.APPEARANCE.MATERIAL
     targetPart.Color = DroneConfig.TARGETS.APPEARANCE.COLOR
     targetPart.Anchored = true
     targetPart.CanCollide = false
-    targetPart.Parent = targetsFolder
+    targetPart.Parent = targetModel
+
+    -- 添加圆形靶子纹理
+    local frontDecal = Instance.new("Decal")
+    frontDecal.Texture = "rbxasset://textures/face.png" -- 可以替换为自定义靶子纹理
+    frontDecal.Face = Enum.NormalId.Front
+    frontDecal.Parent = targetPart
+
+    -- 添加支撑杆
+    local pole = Instance.new("Part")
+    pole.Name = "Pole"
+    pole.Size = Vector3.new(0.5, 8, 0.5)
+    pole.Position = position - Vector3.new(0, 4.5, 0)
+    pole.Material = Enum.Material.Wood
+    pole.Color = Color3.fromRGB(139, 69, 19) -- 棕色
+    pole.Anchored = true
+    pole.CanCollide = false
+    pole.Parent = targetModel
+
+    -- 添加底座
+    local base = Instance.new("Part")
+    base.Name = "Stand"
+    base.Size = Vector3.new(3, 0.5, 3)
+    base.Position = position - Vector3.new(0, 8.75, 0)
+    base.Material = Enum.Material.Concrete
+    base.Color = Color3.fromRGB(100, 100, 100) -- 灰色
+    base.Anchored = true
+    base.CanCollide = true
+    base.Parent = targetModel
+
+    -- 设置PrimaryPart为主要的靶子部分
+    targetModel.PrimaryPart = targetPart
 
     -- 添加标识牌
     if DroneConfig.TARGETS.MARKER.ENABLED then
@@ -85,6 +121,7 @@ function TargetService.createTarget(position)
     end
 
     targetData.part = targetPart
+    targetData.model = targetModel
     targets[targetId] = targetData
 
     print("🎯 创建靶子:", targetId, "位置:", position)
@@ -154,14 +191,21 @@ function TargetService.destroyTarget(targetId, destroyerId)
     target.respawnTime = tick() + DroneConfig.TARGETS.RESPAWN_TIME
 
     -- 隐藏靶子
-    if target.part then
-        target.part.Transparency = 1
-        target.part.CanCollide = false
+    if target.model then
+        -- 隐藏模型中的所有部件
+        for _, part in pairs(target.model:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.Transparency = 1
+                part.CanCollide = false
+            end
+        end
 
         -- 隐藏GUI
-        local gui = target.part:FindFirstChild("BillboardGui")
-        if gui then
-            gui.Enabled = false
+        if target.part then
+            local gui = target.part:FindFirstChild("BillboardGui")
+            if gui then
+                gui.Enabled = false
+            end
         end
     end
 
@@ -183,19 +227,36 @@ function TargetService.respawnTarget(targetId)
     target.respawnTime = 0
 
     -- 显示靶子
-    if target.part then
-        target.part.Transparency = 0
-        target.part.CanCollide = false
-        target.part.Color = DroneConfig.TARGETS.APPEARANCE.COLOR
+    if target.model then
+        -- 显示模型中的所有部件并恢复原始属性
+        for _, part in pairs(target.model:GetChildren()) do
+            if part:IsA("BasePart") then
+                if part.Name == "Base" then
+                    part.Transparency = 0
+                    part.CanCollide = false
+                    part.Color = DroneConfig.TARGETS.APPEARANCE.COLOR
+                elseif part.Name == "Pole" then
+                    part.Transparency = 0
+                    part.CanCollide = false
+                    part.Color = Color3.fromRGB(139, 69, 19)
+                elseif part.Name == "Stand" then
+                    part.Transparency = 0
+                    part.CanCollide = true
+                    part.Color = Color3.fromRGB(100, 100, 100)
+                end
+            end
+        end
 
         -- 显示GUI并重置血条
-        local gui = target.part:FindFirstChild("BillboardGui")
-        if gui then
-            gui.Enabled = true
-            local healthFill = gui:FindFirstChild("Frame"):FindFirstChild("HealthFill")
-            if healthFill then
-                healthFill.Size = UDim2.new(1, 0, 1, 0)
-                healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        if target.part then
+            local gui = target.part:FindFirstChild("BillboardGui")
+            if gui then
+                gui.Enabled = true
+                local healthFill = gui:FindFirstChild("Frame"):FindFirstChild("HealthFill")
+                if healthFill then
+                    healthFill.Size = UDim2.new(1, 0, 1, 0)
+                    healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                end
             end
         end
     end
@@ -281,7 +342,9 @@ end
 function TargetService.cleanup()
     -- 清理所有靶子
     for targetId, target in pairs(targets) do
-        if target.part then
+        if target.model then
+            target.model:Destroy()
+        elseif target.part then
             target.part:Destroy()
         end
     end

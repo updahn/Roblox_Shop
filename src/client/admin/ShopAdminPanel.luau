@@ -21,6 +21,7 @@ local adminFrame = nil
 local contentArea = nil
 local tabButtons = {}
 local currentTab = "users"
+local currentScreenGui = nil  -- 存储传入的screenGui引用
 
 -- 数据存储
 local allPlayersData = {}
@@ -42,6 +43,9 @@ local allTabs = {
 -- 显示管理员面板主入口
 function ShopAdminPanel.showAdminPanel(screenGui, showNotification)
     print("🔧 [统一管理面板] 显示管理员面板")
+
+    -- 保存screenGui引用以供后续使用
+    currentScreenGui = screenGui
 
     -- 检查管理员权限 - 增加容错机制
     local isAdmin = false
@@ -394,7 +398,7 @@ function ShopAdminPanel._showUsersPanel(showNotification)
 
         if loadingLabel and loadingLabel.Parent then
             print("⚠️ [用户管理] 请求超时，显示错误提示")
-            loadingLabel.Text = "⚠️ 服务器响应超时\n可能原因：API服务器离线或网络问题"
+            loadingLabel.Text = "⚠️ 服务器响应超时\n可能原因：数据服务离线或网络问题"
             loadingLabel.TextColor3 = ShopUtils.COLORS.WARNING
 
             -- 5秒后自动显示测试数据
@@ -546,7 +550,7 @@ function ShopAdminPanel._showUsersPanel(showNotification)
             end
 
             if isSimulatedData and showNotification then
-                showNotification("⚠️ 显示模拟数据（API离线）", true)
+                showNotification("⚠️ 显示模拟数据（数据服务离线）", true)
             else
                 if showNotification then
                     showNotification("✅ 用户数据加载成功", true)
@@ -561,7 +565,7 @@ function ShopAdminPanel._showUsersPanel(showNotification)
             print("❌ [错误] 未收到有效的用户数据")
             if not hasReceivedData then
                 local noDataLabel = Instance.new("TextLabel")
-                noDataLabel.Text = "❌ 无法加载玩家数据\n\n可能的原因：\n• API服务器未启动\n• 数据库连接问题\n• 网络连接异常\n\n将自动显示测试数据供参考"
+                noDataLabel.Text = "❌ 无法加载玩家数据\n\n可能的原因：\n• 数据服务未响应\n• 数据库连接问题\n• 网络连接异常\n\n将自动显示测试数据供参考"
                 noDataLabel.Font = Enum.Font.SourceSans
                 noDataLabel.TextSize = 14
                 noDataLabel.TextColor3 = ShopUtils.COLORS.ERROR
@@ -672,7 +676,7 @@ function ShopAdminPanel._displayAllPlayersData(allPlayersData, showNotification)
     if count == 0 then
         print("👤 [调试] 没有用户数据，显示提示")
         local noDataLabel = Instance.new("TextLabel")
-        noDataLabel.Text = "😔 暂无用户数据\n\n可能的原因:\n• 后端API服务未启动\n• 数据库中没有用户数据\n• 网络连接问题\n\n建议：点击\"🔧 显示测试数据\"按钮查看示例"
+        noDataLabel.Text = "😔 暂无用户数据\n\n可能的原因:\n• 数据服务未启动\n• 数据库中没有用户数据\n• 网络连接问题\n\n建议：点击\"🔧 显示测试数据\"按钮查看示例"
         noDataLabel.Font = Enum.Font.SourceSans
         noDataLabel.TextSize = 16
         noDataLabel.TextColor3 = ShopUtils.COLORS.TEXT_MUTED
@@ -822,7 +826,40 @@ function ShopAdminPanel._displayAllPlayersData(allPlayersData, showNotification)
         local setCoinsBtn = ShopUtils.createButton("设置", ShopUtils.COLORS.SUCCESS, playerCard, function()
             local newCoins = tonumber(coinsInput.Text)
             if newCoins and newCoins >= 0 and newCoins <= 999999 then
-                ShopEvents.Admin.SetUserCoins:FireServer(playerName, newCoins)
+                -- 发送修改金币请求
+                if ShopEvents.Admin.SetUserCoins then
+                    ShopEvents.Admin.SetUserCoins:FireServer(playerName, newCoins)
+
+                    -- 监听修改结果
+                    local connection
+                    connection = ShopEvents.Admin.SetUserCoins.OnClientEvent:Connect(function(success, message)
+                        connection:Disconnect()
+
+                        if success then
+                            print("✅ 金币修改成功:", playerName, newCoins)
+                            -- 立即更新显示
+                            coinsLabel.Text = "💰 " .. newCoins .. " 金币"
+                            if showNotification then
+                                showNotification("✅ " .. message, true)
+                            end
+
+                            -- 刷新用户列表以确保数据同步
+                            task.wait(0.5)
+                            ShopAdminPanel._refreshPlayerData()
+
+                            -- 再次刷新以确保数据完全同步
+                            task.wait(1.0)
+                            ShopAdminPanel._refreshPlayerData()
+                        else
+                            print("❌ 金币修改失败:", message)
+                            if showNotification then
+                                showNotification("❌ " .. message, false)
+                            end
+                        end
+                    end)
+                else
+                    print("❌ SetUserCoins 事件不存在")
+                end
             else
                 if showNotification then
                     showNotification("❌ 金币数量必须在 0-999999 之间", false)
@@ -997,7 +1034,16 @@ function ShopAdminPanel._displayUserRecords(records)
 
         -- 时间戳
         local timeLabel = Instance.new("TextLabel")
-        timeLabel.Text = ShopUtils.formatTimestamp(record.timestamp or record.createdAt)
+
+        -- 调试时间戳问题
+        local timestamp = record.timestamp or record.createdAt or record.transactionDate
+        print("📊 [调试] 交易记录时间戳:",
+            "timestamp=", record.timestamp,
+            "createdAt=", record.createdAt,
+            "transactionDate=", record.transactionDate,
+            "使用=", timestamp)
+
+        timeLabel.Text = ShopUtils.formatTimestamp(timestamp)
         timeLabel.Font = Enum.Font.SourceSans
         timeLabel.TextSize = 12
         timeLabel.TextColor3 = ShopUtils.COLORS.TEXT_MUTED
@@ -1018,6 +1064,8 @@ function ShopAdminPanel._displayUserRecords(records)
             actionText = "⚙️ 管理员操作 x" .. (record.quantity or 1)
         elseif record.type == "daily_reward" then
             actionText = "🎁 每日奖励 x" .. (record.quantity or 1)
+        elseif record.type == "membership_purchase" then
+            actionText = "💎 购买会员 " .. (record.itemName or record.item_name or "未知会员") .. " x" .. (record.quantity or 1)
         end
         actionLabel.Text = actionText
         actionLabel.Font = Enum.Font.SourceSansBold
@@ -1045,6 +1093,9 @@ function ShopAdminPanel._displayUserRecords(records)
         elseif record.type == "daily_reward" then
             amountText = "+" .. (record.totalAmount or record.total_amount or 0) .. " 金币"
             amountColor = ShopUtils.COLORS.SUCCESS
+        elseif record.type == "membership_purchase" then
+            amountText = "-" .. (record.totalAmount or record.totalCost or record.total_amount or 0) .. " 金币"
+            amountColor = ShopUtils.COLORS.ERROR
         end
         amountLabel.Text = amountText
         amountLabel.Font = Enum.Font.SourceSansBold
@@ -1421,7 +1472,7 @@ function ShopAdminPanel._displayMembershipData()
             membershipInfo.isMember and ShopUtils.COLORS.ERROR or ShopUtils.COLORS.SUCCESS,
             entryFrame,
             function()
-                ShopAdminPanel._toggleMembership(playerName, membershipInfo)
+                ShopAdminPanel._toggleUserMembershipByName(playerName, membershipInfo)
             end
         )
         quickButton.Position = UDim2.new(0.8, 0, 0, 10)
@@ -1439,6 +1490,46 @@ function ShopAdminPanel._displayMembershipData()
     end
 
     contentArea.CanvasSize = UDim2.new(0, 0, 0, yPos + 20)
+end
+
+-- 通过用户名切换会员状态
+function ShopAdminPanel._toggleUserMembershipByName(playerName, membershipInfo)
+    print("🔄 [会员管理] 通过用户名切换会员状态:", playerName)
+
+    local isMember = membershipInfo.isMember
+    local action = isMember and "deactivate" or "activate"
+
+    local requestData = {
+        playerName = playerName,
+        action = action,
+        days = action == "activate" and 30 or nil,
+        dailyReward = membershipInfo.dailyReward or 100
+    }
+
+    if ShopEvents.Admin.ManageUserMembership then
+        ShopEvents.Admin.ManageUserMembership:FireServer(requestData)
+
+        local connection
+        connection = ShopEvents.Admin.ManageUserMembership.OnClientEvent:Connect(function(success, response)
+            connection:Disconnect()
+
+            if success and response and response.success then
+                print("✅", playerName, "会员状态切换成功")
+                -- 重新获取用户数据并刷新界面
+                if ShopEvents.Admin.GetUserInfo then
+                    ShopEvents.Admin.GetUserInfo:FireServer(playerName)
+                end
+                -- 刷新用户列表以更新所有相关数据
+                ShopAdminPanel._refreshPlayerData()
+            else
+                local errorMsg = response and (response.message or response.error) or "操作失败"
+                print("❌ 会员状态切换失败:", errorMsg)
+                ShopUtils.showNotification("❌ " .. errorMsg, false, currentScreenGui)
+            end
+        end)
+    else
+        print("❌ ManageUserMembership 事件不存在")
+    end
 end
 
 -- 切换用户会员状态
@@ -1465,11 +1556,24 @@ function ShopAdminPanel._toggleUserMembership(user)
 
             if success and response and response.success then
                 print("✅", user.username, "会员状态切换成功")
-                -- 刷新会员管理面板
-                ShopAdminPanel._showMembershipPanel()
+                ShopUtils.showNotification("✅ " .. user.username .. " 会员状态切换成功", true, currentScreenGui)
+
+                -- 异步刷新面板数据，避免阻塞界面
+                spawn(function()
+                    -- 重新获取用户数据并刷新面板
+                    if currentViewingPlayer then
+                        if ShopEvents.Admin.GetUserInfo then
+                            ShopEvents.Admin.GetUserInfo:FireServer(currentViewingPlayer)
+                        end
+                        -- 等待数据更新然后刷新面板
+                        task.wait(0.3)
+                        ShopAdminPanel._showMembershipPanel()
+                    end
+                end)
             else
                 local errorMsg = response and response.message or "操作失败"
                 print("❌ 会员状态切换失败:", errorMsg)
+                ShopUtils.showNotification("❌ " .. errorMsg, false, currentScreenGui)
             end
         end)
     else
@@ -1496,12 +1600,26 @@ function ShopAdminPanel._setMembershipDays(user, days)
             connection:Disconnect()
 
             if success and response and response.success then
-                print("✅", user.username, "会员天数设置成功")
-                -- 刷新会员管理面板
-                ShopAdminPanel._showMembershipPanel()
+                local successMsg = response.message or "会员天数设置成功"
+                print("✅", user.username, successMsg)
+                ShopUtils.showNotification("✅ " .. user.username .. " " .. successMsg, true, currentScreenGui)
+
+                -- 异步刷新面板数据，避免阻塞界面
+                spawn(function()
+                    -- 重新获取用户数据并刷新面板
+                    if currentViewingPlayer then
+                        if ShopEvents.Admin.GetUserInfo then
+                            ShopEvents.Admin.GetUserInfo:FireServer(currentViewingPlayer)
+                        end
+                        -- 等待数据更新然后刷新面板
+                        task.wait(0.3)
+                        ShopAdminPanel._showMembershipPanel()
+                    end
+                end)
             else
                 local errorMsg = response and response.message or "操作失败"
                 print("❌ 会员天数设置失败:", errorMsg)
+                ShopUtils.showNotification("❌ " .. errorMsg, false, currentScreenGui)
             end
         end)
     else
@@ -1529,8 +1647,15 @@ function ShopAdminPanel._setDailyReward(user, reward)
 
             if success and response and response.success then
                 print("✅", user.username, "每日奖励设置成功")
-                -- 刷新会员管理面板
-                ShopAdminPanel._showMembershipPanel()
+                -- 重新获取用户数据并刷新面板
+                if currentViewingPlayer then
+                    if ShopEvents.Admin.GetUserInfo then
+                        ShopEvents.Admin.GetUserInfo:FireServer(currentViewingPlayer)
+                    end
+                    -- 稍等片刻让数据更新，然后刷新面板
+                    task.wait(0.5)
+                    ShopAdminPanel._showMembershipPanel()
+                end
             else
                 local errorMsg = response and response.message or "操作失败"
                 print("❌ 每日奖励设置失败:", errorMsg)
@@ -1541,5 +1666,19 @@ function ShopAdminPanel._setDailyReward(user, reward)
     end
 end
 
+-- 刷新玩家数据
+function ShopAdminPanel._refreshPlayerData()
+    print("🔄 [管理面板] 刷新玩家数据")
+
+    if currentTab == "players" then
+        -- 重新获取用户列表
+        if ShopEvents.Admin.GetAllUsers then
+            ShopEvents.Admin.GetAllUsers:FireServer()
+        end
+    elseif currentTab == "membership" then
+        -- 重新获取会员数据
+        ShopAdminPanel._showMembershipPanel()
+    end
+end
 
 return ShopAdminPanel

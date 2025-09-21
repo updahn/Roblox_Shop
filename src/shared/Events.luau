@@ -50,6 +50,9 @@ Events.User = {
 
     -- 通用功能
     RefreshData = createRemoteEvent("RefreshData"),
+
+    -- 会员状态通知
+    MembershipStatusChanged = createRemoteEvent("MembershipStatusChanged"),
 }
 
 -- ==============================================

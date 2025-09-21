@@ -34,14 +34,45 @@ function UserService.authenticatePlayer(player: Player)
 
     local success, userData = DataService.authenticateUser(userId, username, displayName)
     if success then
-        -- 检查管理员权限（使用API验证）
-        local isApiAdmin = userData and userData.isAdmin
-        local isValidAdminCheck, _ = DataService.checkAdminPermission(userId)
-        local finalIsAdmin = isApiAdmin or isValidAdminCheck
+        -- 优先检查配置文件中的管理员用户名（立即生效）
+        local SharedModules = game:GetService("ReplicatedStorage"):WaitForChild("SharedModules")
+        local Config = require(SharedModules:WaitForChild("Config"))
+        local defaultAdminUsernames = Config.ADMIN.DEFAULT_ADMIN_USERNAMES or {}
 
-        if isValidAdminCheck then
-            print("⚡ [认证] " .. player.Name .. " 通过API权限检查确认为管理员")
-        elseif isApiAdmin then
+        local isConfigAdmin = false
+        for _, adminUsername in ipairs(defaultAdminUsernames) do
+            if player.Name == adminUsername then
+                isConfigAdmin = true
+                print("⚡ [认证] " .. player.Name .. " 通过配置文件确认为管理员（立即生效）")
+                break
+            end
+        end
+
+        -- 检查数据库中的管理员权限
+        local isDataAdmin = userData and userData.isAdmin
+        local isValidAdminCheck, _ = DataService.checkAdminPermission(userId)
+
+        -- 最终管理员状态：配置文件优先
+        local finalIsAdmin = isConfigAdmin or isDataAdmin or isValidAdminCheck
+
+        if isConfigAdmin then
+            print("✅ [认证] " .. player.Name .. " 管理员权限立即生效（来源：配置文件）")
+            -- 异步确保数据库中也设置了管理员标识
+            spawn(function()
+                wait(1)
+                local success = pcall(function()
+                    local AdminDataService = require(script.Parent:WaitForChild("AdminDataService"))
+                    AdminDataService.promoteToAdmin(userId)
+                end)
+                if success then
+                    print("✅ [认证] " .. player.Name .. " 数据库管理员标识已同步设置")
+                else
+                    print("⚠️ [认证] " .. player.Name .. " 数据库管理员标识同步失败，但配置文件权限仍有效")
+                end
+            end)
+        elseif isValidAdminCheck then
+            print("⚡ [认证] " .. player.Name .. " 通过权限检查确认为管理员")
+        elseif isDataAdmin then
             print("⚡ [认证] " .. player.Name .. " 通过用户数据确认为管理员")
         end
 
@@ -76,9 +107,13 @@ function UserService.cleanupPlayer(player: Player)
     if playerSessions[player] then
         local session = playerSessions[player]
         if session.userId then
-            DataService.removeToken(session.userId)
+            -- 清理用户会话数据 (DataService使用内部会话管理)
+            pcall(function()
+                DataService.clearUserSession(session.userId)
+            end)
         end
         playerSessions[player] = nil
+        print("🧹 [清理] " .. player.Name .. " 会话数据已清理")
     end
 end
 
@@ -88,12 +123,12 @@ function UserService.isPlayerAuthenticated(player: Player): boolean
 end
 
 function UserService.isPlayerAdmin(player: Player): boolean
-    -- 使用API权限检查
+    -- 使用权限检查
     local userId = tostring(player.UserId)
     local isValidAdminCheck, _ = DataService.checkAdminPermission(userId)
 
     if isValidAdminCheck then
-        print("⚡ [UserService] " .. player.Name .. " 通过API权限检查验证为管理员")
+        print("⚡ [UserService] " .. player.Name .. " 通过权限检查验证为管理员")
         return true
     end
 
@@ -108,6 +143,28 @@ function UserService.isPlayerAdmin(player: Player): boolean
 
     print("❌ [UserService] " .. player.Name .. " 不是管理员")
     return false
+end
+
+-- 刷新玩家数据（用于实时更新会员状态等）
+function UserService.refreshPlayerData(player: Player)
+    print("🔄 [UserService] 刷新玩家数据:", player.Name)
+
+    local session = getPlayerSession(player)
+    if not session or not session.authenticated then
+        warn("❌ [UserService] 无法刷新未认证用户的数据:", player.Name)
+        return
+    end
+
+    -- 清除会员状态缓存以确保获取最新数据
+    local UserDataService = DataService.getUserDataService and DataService.getUserDataService() or require(script.Parent:WaitForChild("UserDataService"))
+    if UserDataService.clearMembershipCache then
+        UserDataService.clearMembershipCache(session.userId)
+    end
+
+    -- 发送最新的玩家数据
+    handleGetPlayerData(player)
+
+    print("✅ [UserService] 玩家数据刷新完成:", player.Name)
 end
 
 -- ==============================================
@@ -159,6 +216,10 @@ local function handleGetPlayerData(player: Player)
         -- 添加交易记录到玩家数据中
         if transactionSuccess and transactionData and transactionData.transactions then
             for _, transaction in ipairs(transactionData.transactions) do
+                -- 确保时间戳字段存在和正确
+                local createdAt = transaction.created_at or transaction.timestamp or os.time()
+                local transactionDate = transaction.transaction_date or os.date("%Y-%m-%d", createdAt)
+
                 table.insert(playerData.transactionHistory, {
                     id = transaction.id,
                     itemId = transaction.item_id,
@@ -167,9 +228,9 @@ local function handleGetPlayerData(player: Player)
                     quantity = transaction.quantity,
                     unitPrice = transaction.unit_price,
                     totalAmount = transaction.total_amount,
-                    transactionDate = transaction.transaction_date,
-                    createdAt = transaction.created_at,
-                    timestamp = transaction.created_at -- 为了兼容性
+                    transactionDate = transactionDate,
+                    createdAt = createdAt,
+                    timestamp = createdAt -- 为了兼容性
                 })
             end
         end
@@ -226,13 +287,58 @@ local function handleBuyItem(player: Player, itemId: string, quantity: number)
         return
     end
 
+    -- 检查是否为会员商品
+    local membershipItems = {"monthly_membership", "weekly_membership", "quarterly_membership", "premium_membership", "vip_membership"}
+    local isMembershipItem = false
+    for _, membershipItemId in ipairs(membershipItems) do
+        if itemId == membershipItemId then
+            isMembershipItem = true
+            break
+        end
+    end
+
     local success, message = DataService.buyItem(session.userId, itemId, quantity)
 
     if success then
+        -- 如果购买的是会员商品，特殊处理确保会员状态更新
+        if isMembershipItem then
+            local UserDataService = require(script.Parent:WaitForChild("UserDataService"))
+            if UserDataService.clearMembershipCache then
+                UserDataService.clearMembershipCache(session.userId)
+                print("🧹 [购买] 清除会员缓存:", player.Name, itemId)
+            end
+
+            -- 稍等一下确保数据完全写入
+            task.wait(0.2)
+            print("✅ [购买] 会员商品购买成功，准备获取最新状态:", player.Name, itemId)
+
+            -- 再次清除缓存确保获取最新数据
+            if UserDataService.clearMembershipCache then
+                UserDataService.clearMembershipCache(session.userId)
+            end
+        end
+
         -- 获取更新后的用户数据
         local userData = DataService.getUserData(session.userId)
         local inventory = DataService.getUserInventory(session.userId)
         local membershipStatus = DataService.getMembershipStatus(session.userId)
+
+        -- 如果是会员商品，记录状态用于调试
+        if isMembershipItem then
+            if membershipStatus then
+                print("🔍 [购买] 获取到的会员状态:", membershipStatus.hasMembership and "有会员" or "无会员",
+                      "有效:", membershipStatus.isValid and "是" or "否",
+                      "剩余天数:", membershipStatus.daysRemaining or 0)
+            else
+                print("⚠️ [购买] 无法获取会员状态，将再次尝试")
+                task.wait(0.1)
+                membershipStatus = DataService.getMembershipStatus(session.userId)
+                if membershipStatus then
+                    print("🔍 [购买] 重新获取会员状态成功:", membershipStatus.hasMembership and "有会员" or "无会员",
+                          "剩余天数:", membershipStatus.daysRemaining or 0)
+                end
+            end
+        end
 
         local playerData = {
             coins = userData.coins,
@@ -255,8 +361,21 @@ local function handleBuyItem(player: Player, itemId: string, quantity: number)
         }
 
         session.userData = userData
-        Events.User.BuyItem:FireClient(player, true, message, playerData)
+        -- 为会员商品购买提供特殊消息
+        local finalMessage = message
+        if isMembershipItem then
+            finalMessage = "会员购买成功！" .. message
+        end
+
+        Events.User.BuyItem:FireClient(player, true, finalMessage, playerData)
         print("🛒 [购买] " .. player.Name .. " 购买了 " .. itemId .. " x" .. quantity)
+
+        -- 如果购买的是会员商品，打印会员状态信息
+        if isMembershipItem and membershipStatus then
+            print("👑 [会员] " .. player.Name .. " 购买会员后状态:",
+                membershipStatus.isValid and "激活" or "未激活",
+                "剩余天数:", membershipStatus.daysRemaining or 0)
+        end
 
         -- 广播商店数据更新给所有玩家
         for _, otherPlayer in pairs(Players:GetPlayers()) do
@@ -349,6 +468,10 @@ local function handleGetTransactions(player: Player, limit: number?, offset: num
 
         if data.transactions then
             for i, transaction in ipairs(data.transactions) do
+                -- 确保时间戳字段存在和正确
+                local createdAt = transaction.created_at or transaction.timestamp or os.time()
+                local transactionDate = transaction.transaction_date or os.date("%Y-%m-%d", createdAt)
+
                 table.insert(clientTransactions, {
                     id = transaction.id,
                     itemId = transaction.item_id,
@@ -357,9 +480,9 @@ local function handleGetTransactions(player: Player, limit: number?, offset: num
                     quantity = transaction.quantity,
                     unitPrice = transaction.unit_price,
                     totalAmount = transaction.total_amount,
-                    transactionDate = transaction.transaction_date,
-                    createdAt = transaction.created_at,
-                    timestamp = transaction.created_at -- 为了兼容性
+                    transactionDate = transactionDate,
+                    createdAt = createdAt,
+                    timestamp = createdAt -- 为了兼容性
                 })
             end
         end
