@@ -27,7 +27,12 @@ local Config = {}
 Config.ADMIN = {
     -- 默认管理员用户名列表（在这里添加需要设置为管理员的用户名）
     DEFAULT_ADMIN_USERNAMES = {
-        "updahn"
+        -- "updahn",
+        -- 测试管理员
+        "Player1",
+        "Player2",
+        -- 测试普通用户
+        -- "Player3"
     },
 
     -- 配置是否已加载
@@ -317,7 +322,22 @@ Config.LOCALIZATION = {
 -- 提供各种帮助函数用于配置管理和数据处理
 -- ==============================================
 
--- 管理员验证缓存
+-- 导入缓存服务（仅在服务端可用）
+local RunService = game:GetService("RunService")
+local CacheService = nil
+
+-- 获取缓存服务（延迟初始化，仅服务端）
+local function getCacheService()
+    if not CacheService and RunService:IsServer() then
+        pcall(function()
+            local ServerStorage = game:GetService("ServerStorage")
+            CacheService = require(ServerStorage.Server.services.CacheService)
+        end)
+    end
+    return CacheService
+end
+
+-- 客户端管理员验证缓存（保持兼容性）
 local adminValidationCache = {}
 local ADMIN_CACHE_DURATION = 30
 

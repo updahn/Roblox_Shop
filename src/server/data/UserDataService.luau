@@ -540,72 +540,43 @@ end
 -- 会员系统
 -- ==============================================
 
--- 会员状态缓存（避免频繁查询数据库）
-local membershipCache = {}
-local cacheExpiry = {} -- 缓存过期时间
-local CACHE_DURATION = 300 -- 缓存5分钟
+-- 导入统一缓存服务 - 用于会员状态缓存管理
+local CacheService = nil -- 延迟加载避免循环依赖
 
--- 清理过期缓存
-local function cleanupExpiredCache()
-    local currentTime = os.time()
-    for userId, expiry in pairs(cacheExpiry) do
-        if currentTime > expiry then
-            membershipCache[userId] = nil
-            cacheExpiry[userId] = nil
-        end
+-- 获取缓存服务（延迟初始化）
+-- 会员状态数据将被缓存5分钟，避免频繁的DataStore访问
+local function getCacheService()
+    if not CacheService then
+        CacheService = require(script.Parent.Parent.services.CacheService)
     end
-end
-
--- 获取缓存的会员状态
-local function getCachedMembershipStatus(userId)
-    cleanupExpiredCache()
-
-    local cached = membershipCache[userId]
-    local expiry = cacheExpiry[userId]
-
-    if cached and expiry and os.time() < expiry then
-        return cached
-    end
-
-    return nil
-end
-
--- 缓存会员状态
-local function cacheMembershipStatus(userId, status)
-    membershipCache[userId] = status
-    cacheExpiry[userId] = os.time() + CACHE_DURATION
-end
-
--- 清除特定用户的缓存
-local function clearMembershipCache(userId)
-    membershipCache[userId] = nil
-    cacheExpiry[userId] = nil
+    return CacheService
 end
 
 -- 导出清除缓存函数供外部使用
 function UserDataService.clearMembershipCache(userId)
-    clearMembershipCache(userId)
+    local cacheService = getCacheService()
+    -- 使用高级缓存服务接口
+    cacheService.refreshUserCache(userId, false)
     print("🧹 [UserDataService] 已清除用户会员缓存:", userId)
 end
 
 -- 清除所有缓存（管理员功能）
 function UserDataService.clearAllMembershipCache()
-    membershipCache = {}
-    cacheExpiry = {}
+    local cacheService = getCacheService()
+    -- 使用高级缓存服务接口
+    cacheService.Manager.clear(cacheService.Types.MEMBERSHIP)
     print("✅ [会员系统] 已清除所有会员状态缓存")
 end
 
 -- 获取缓存统计信息（调试用）
 function UserDataService.getMembershipCacheStats()
-    cleanupExpiredCache()
-    local cacheCount = 0
-    for _ in pairs(membershipCache) do
-        cacheCount = cacheCount + 1
-    end
+    local cacheService = getCacheService()
+    local stats = cacheService.Manager.getStats()
+    local membershipStats = stats.caches and stats.caches[cacheService.Types.MEMBERSHIP] or {}
 
     return {
-        cachedUsers = cacheCount,
-        cacheDuration = CACHE_DURATION
+        cachedUsers = membershipStats.count or 0,
+        cacheDuration = 300 -- 使用默认TTL
     }
 end
 
@@ -770,7 +741,8 @@ function UserDataService.getMembershipStatus(userId)
     userId = tostring(userId)
 
     -- 尝试从缓存获取
-    local cached = getCachedMembershipStatus(userId)
+    local cacheService = getCacheService()
+    local cached = cacheService.getMembershipStatus(userId)
     if cached then
         -- 对于无效会员或者没有结束日期的直接返回缓存
         if not cached.isValid or not cached.endDate then
@@ -780,7 +752,7 @@ function UserDataService.getMembershipStatus(userId)
         -- 验证缓存的会员是否真的过期（简单检查剩余天数）
         if cached.daysRemaining and cached.daysRemaining <= 0 then
             -- 缓存显示已过期，清除缓存重新查询
-            clearMembershipCache(userId)
+            UserDataService.clearMembershipCache(userId)
         else
             return cached
         end
@@ -929,7 +901,8 @@ function UserDataService.getMembershipStatus(userId)
     end
 
     -- 缓存结果
-    cacheMembershipStatus(userId, result)
+    local cacheService = getCacheService()
+    cacheService.cacheMembershipStatus(userId, result, 300) -- 缓存5分钟
 
     return result
 end
@@ -946,7 +919,7 @@ function UserDataService.deactivateMembership(userId)
 
     -- 清除缓存
     if success then
-        clearMembershipCache(userId)
+        UserDataService.clearMembershipCache(userId)
     end
 
     return success
@@ -1054,7 +1027,7 @@ function UserDataService.buyMembershipItem(userId, itemId, quantity)
     end
 
     -- 清除缓存
-    clearMembershipCache(userId)
+    UserDataService.clearMembershipCache(userId)
 
     -- 记录交易
     UserDataService.addTransactionRecord(userId, "membership_purchase", itemId, quantity, itemData.price, totalCost, result.coins + totalCost, result.coins, string.format("购买%d个月会员，有效期%d天", quantity, durationDays))

@@ -28,6 +28,7 @@ src/
 │   ├── services/              # 业务服务层
 │   │   ├── UserService.luau   # 普通用户服务
 │   │   ├── AdminService.luau  # 管理员服务
+│   │   ├── CacheService.luau  # 缓存服务
 │   │   ├── DroneService.luau  # 无人机服务
 │   │   └── DataService.luau   # 数据服务统一接口
 │   ├── data/                  # 数据层模块
@@ -36,6 +37,7 @@ src/
 │   │   └── AdminDataService.luau
 │   └── utils/                 # 工具和辅助模块
 │       ├── EnvironmentManager.luau
+│       ├── CacheManager.luau      # 统一缓存管理器
 │       ├── ItemsInitializer.luau
 │       ├── TargetService.luau
 │       └── SetupReplicatedStorage.luau
@@ -177,11 +179,73 @@ DRONE_CONFIG = {
 | 季卡     | 2700  | 90 天  | 100      |
 | VIP 年卡 | 10000 | 365 天 | 150      |
 
+## 🚀 缓存系统
+
+### 统一缓存架构
+
+项目采用分层缓存架构，提供高效的数据缓存和同步机制：
+
+#### 核心组件
+
+- **CacheManager** (`src/server/utils/CacheManager.luau`)
+
+  - 底层缓存管理器，提供统一的缓存接口
+  - 支持多种缓存类型：用户数据、库存、会员状态、管理员权限等
+  - 基于 MessagingService 的跨服务器缓存同步
+  - 自动过期清理和 LRU 缓存策略
+
+- **CacheService** (`src/server/services/CacheService.luau`)
+  - 高级缓存服务，是 CacheManager 的包装器
+  - 提供简化的缓存操作接口
+  - 客户端通知功能
+  - 管理员缓存管理功能
+
+#### 缓存类型
+
+```luau
+-- 支持的缓存类型
+USER_DATA = "users"           -- 用户基础数据
+USER_INVENTORY = "inventory"  -- 用户库存
+MEMBERSHIP = "membership"     -- 会员状态
+ADMIN_PERMISSIONS = "admin"   -- 管理员权限
+SHOP_ITEMS = "shop_items"     -- 商品信息
+SYSTEM_CONFIG = "system_config" -- 系统配置
+TRANSACTIONS = "transactions"  -- 交易记录缓存
+DAILY_REWARDS = "daily_rewards" -- 每日奖励记录
+```
+
+#### 使用示例
+
+```luau
+-- 获取缓存服务
+local CacheService = require(script.Parent.Parent.services.CacheService)
+
+-- 缓存用户数据
+CacheService.cacheUserData(userId, userData, 600) -- TTL 10分钟
+
+-- 获取用户数据
+local userData = CacheService.getUserData(userId)
+
+-- 刷新用户缓存
+CacheService.refreshUserCache(userId)
+
+-- 管理员功能：清除所有缓存
+CacheService.globalRefresh()
+```
+
+### 集成状态
+
+- ✅ **DataManager** - 完全集成统一缓存系统
+- ✅ **AdminService** - 管理员权限缓存
+- ✅ **UserDataService** - 会员状态缓存
+- ✅ **Config** - 客户端权限验证缓存整合
+
 ## 🛡️ 安全特性
 
 - **权限控制** - 多级权限验证，操作安全性保障
 - **数据安全** - 原子操作，错误恢复，操作日志
-- **性能优化** - 缓存机制，批量操作，请求限制
+- **缓存安全** - 跨服务器同步，自动失效处理
+- **性能优化** - 智能缓存策略，减少 DataStore 调用
 
 ## 🔧 开发指南
 

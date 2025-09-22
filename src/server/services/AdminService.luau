@@ -13,9 +13,17 @@ local Events = require(SharedModules:WaitForChild("ShopEvents"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local UserService = require(script.Parent:WaitForChild("UserService"))
 
--- 服务端权限检查缓存
-local adminPermissionCache = {}
-local ADMIN_CACHE_DURATION = 30 -- 30秒缓存
+-- 导入缓存服务 - 使用统一缓存系统进行管理员权限缓存
+local CacheService = nil -- 延迟加载避免循环依赖
+
+-- 获取缓存服务（延迟初始化）
+-- 管理员权限验证结果将被缓存3分钟，提高性能
+local function getCacheService()
+    if not CacheService then
+        CacheService = require(script.Parent.CacheService)
+    end
+    return CacheService
+end
 
 -- ==============================================
 -- 权限检查
@@ -28,15 +36,12 @@ function AdminService.isValidAdmin(player: Player): boolean
     end
 
     local userId = tostring(player.UserId)
-    local currentTime = tick()
+    local cacheService = getCacheService()
 
     -- 检查缓存
-    if adminPermissionCache[userId] then
-        local cacheData = adminPermissionCache[userId]
-        if (currentTime - cacheData.timestamp) < ADMIN_CACHE_DURATION then
-            -- 缓存还有效，直接返回缓存结果
-            return cacheData.isAdmin
-        end
+    local cachedResult = cacheService.getAdminPermission(userId)
+    if cachedResult ~= nil then
+        return cachedResult
     end
 
     -- 优先检查配置文件中的管理员用户名（立即生效）
@@ -61,10 +66,7 @@ function AdminService.isValidAdmin(player: Player): boolean
     local finalIsAdmin = isConfigAdmin or isDataAdmin
 
     -- 缓存结果
-    adminPermissionCache[userId] = {
-        isAdmin = finalIsAdmin,
-        timestamp = currentTime
-    }
+    cacheService.cacheAdminPermission(userId, finalIsAdmin, 180) -- 缓存3分钟
 
     if isConfigAdmin then
         print("✅ [AdminService]", player.Name, "管理员权限验证通过（配置文件）")
@@ -530,26 +532,18 @@ end
 
 -- 清理玩家权限缓存
 function AdminService.clearPlayerCache(userId: string)
-    if adminPermissionCache[userId] then
-        adminPermissionCache[userId] = nil
-        print("🧹 [AdminService] 已清理玩家权限缓存:", userId)
-    end
+    local cacheService = getCacheService()
+    cacheService.Manager.invalidate(cacheService.Types.ADMIN_PERMISSIONS, userId)
+    print("🧹 [AdminService] 已清理玩家权限缓存:", userId)
 end
 
 -- 清理所有过期缓存
 function AdminService.cleanupExpiredCache()
-    local currentTime = tick()
-    local cleanedCount = 0
-
-    for userId, cacheData in pairs(adminPermissionCache) do
-        if (currentTime - cacheData.timestamp) > ADMIN_CACHE_DURATION then
-            adminPermissionCache[userId] = nil
-            cleanedCount = cleanedCount + 1
-        end
-    end
+    local cacheService = getCacheService()
+    local cleanedCount = cacheService.Manager.cleanupExpired()
 
     if cleanedCount > 0 then
-        print("🧹 [AdminService] 清理了", cleanedCount, "个过期权限缓存")
+        print("🧹 [AdminService] 清理了", cleanedCount, "个过期缓存")
     end
 end
 
@@ -587,13 +581,7 @@ Events.Admin.ManageUserMembership.OnServerEvent:Connect(handleManageUserMembersh
 
 
 
--- 定期清理过期缓存
-spawn(function()
-    while true do
-        wait(60) -- 每分钟清理一次
-        AdminService.cleanupExpiredCache()
-    end
-end)
+-- 注意：缓存清理现在由CacheManager自动处理
 
 print("👑 管理员服务已启动")
 

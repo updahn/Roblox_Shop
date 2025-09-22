@@ -111,6 +111,35 @@ Events.Target = {
     TargetStatusUpdate = createRemoteEvent("TargetStatusUpdate"),
 }
 
+-- ==============================================
+-- 缓存同步事件
+-- ==============================================
+Events.Cache = {
+    -- 数据刷新通知（服务端 -> 客户端）
+    DataRefreshNotify = createRemoteEvent("CacheDataRefreshNotify"),
+
+    -- 用户数据更新通知
+    UserDataUpdated = createRemoteEvent("CacheUserDataUpdated"),
+
+    -- 商店数据更新通知
+    ShopDataUpdated = createRemoteEvent("CacheShopDataUpdated"),
+
+    -- 会员状态更新通知
+    MembershipUpdated = createRemoteEvent("CacheMembershipUpdated"),
+
+    -- 系统配置更新通知
+    SystemConfigUpdated = createRemoteEvent("CacheSystemConfigUpdated"),
+
+    -- 强制刷新请求（客户端 -> 服务端）
+    ForceRefresh = createRemoteEvent("CacheForceRefresh"),
+
+    -- 缓存统计信息请求（管理员功能）
+    GetCacheStats = createRemoteFunction("CacheGetStats"),
+
+    -- 缓存管理操作（管理员功能）
+    ManageCache = createRemoteEvent("CacheManageCache")
+}
+
 -- 删除了向后兼容代码 - 使用新的分离式事件结构
 
 print("📡 商店事件系统已初始化 (简化版)")

@@ -33,7 +33,7 @@ local function getInitialItemsData()
             price = 250,
             sellPrice = 200,
             maxQuantity = nil,
-            currentStock = -1,
+            currentStock = 10,
             dailyPurchaseLimit = nil,
             canSell = true,
             category = "weapons",

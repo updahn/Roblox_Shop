@@ -1,4 +1,6 @@
 -- 数据持久化管理器
+-- 集成缓存系统，提供高效的玩家数据管理
+-- 支持自动保存、缓存管理和数据持久化
 
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
@@ -21,54 +23,75 @@ else
     playerDataStore = DataStoreService:GetDataStore(DATA_STORE_NAME)
 end
 
--- 玩家数据缓存
-local playerDataCache = {}
+-- 导入缓存服务
+local CacheService = nil -- 延迟加载避免循环依赖
+
+-- 获取缓存服务（延迟初始化）
+local function getCacheService()
+    if not CacheService then
+        CacheService = require(script.Parent.Parent.utils.CacheManager)
+    end
+    return CacheService
+end
+
+-- 玩家数据保存时间记录
 local lastSaveTime = {}
 
 -- 获取玩家数据
 function DataManager.getPlayerData(player: Player)
-    if playerDataCache[player.UserId] then
-        return playerDataCache[player.UserId]
-    end
-    return nil
+    local cacheService = getCacheService()
+    local userId = tostring(player.UserId)
+    return cacheService.getUserData(userId)
 end
 
 -- 设置玩家数据
 function DataManager.setPlayerData(player: Player, data)
-    playerDataCache[player.UserId] = data
+    local cacheService = getCacheService()
+    local userId = tostring(player.UserId)
+    cacheService.cacheUserData(userId, data, 600) -- 缓存10分钟
     lastSaveTime[player.UserId] = tick()
 end
 
 -- 从数据存储加载玩家数据
 function DataManager.loadPlayerData(player: Player, defaultData)
     local success, data = false, nil
+    local userId = tostring(player.UserId)
 
     if isStudio then
         -- Studio环境：使用模拟数据存储
-        data = mockDataStore[tostring(player.UserId)]
+        data = mockDataStore[userId]
         success = true
     else
         -- 生产环境：使用真实数据存储
         success, data = pcall(function()
-            return playerDataStore:GetAsync(tostring(player.UserId))
+            return playerDataStore:GetAsync(userId)
         end)
     end
 
+    local finalData
     if success and data then
-        playerDataCache[player.UserId] = data
+        finalData = data
         print("✅ 成功加载玩家 " .. player.Name .. " 的数据")
     else
-        playerDataCache[player.UserId] = defaultData
+        finalData = defaultData
         print("📝 为玩家 " .. player.Name .. " 创建新数据")
     end
 
+    -- 缓存数据
+    local cacheService = getCacheService()
+    cacheService.cacheUserData(userId, finalData, 600) -- 缓存10分钟
+
     lastSaveTime[player.UserId] = tick()
-    return playerDataCache[player.UserId]
+    return finalData
 end
 
 -- 保存玩家数据到数据存储
 function DataManager.savePlayerData(player: Player)
-    if not playerDataCache[player.UserId] then
+    local cacheService = getCacheService()
+    local userId = tostring(player.UserId)
+    local cachedData = cacheService.getUserData(userId)
+
+    if not cachedData then
         return false
     end
 
@@ -76,12 +99,12 @@ function DataManager.savePlayerData(player: Player)
 
     if isStudio then
         -- Studio环境：使用模拟数据存储
-        mockDataStore[tostring(player.UserId)] = playerDataCache[player.UserId]
+        mockDataStore[userId] = cachedData
         success = true
     else
         -- 生产环境：使用真实数据存储
         success, error = pcall(function()
-            playerDataStore:SetAsync(tostring(player.UserId), playerDataCache[player.UserId])
+            playerDataStore:SetAsync(userId, cachedData)
         end)
     end
 
@@ -96,8 +119,11 @@ end
 
 -- 强制保存所有玩家数据
 function DataManager.saveAllPlayerData()
-    for userId, data in pairs(playerDataCache) do
-        local player = Players:GetPlayerByUserId(userId)
+    local cacheService = getCacheService()
+    local allCachedUsers = cacheService.getAllCachedUsers()
+
+    for _, userId in ipairs(allCachedUsers) do
+        local player = Players:GetPlayerByUserId(tonumber(userId))
         if player then
             DataManager.savePlayerData(player)
         end
@@ -106,10 +132,16 @@ end
 
 -- 清理玩家数据缓存
 function DataManager.clearPlayerData(player: Player)
-    if playerDataCache[player.UserId] then
+    local cacheService = getCacheService()
+    local userId = tostring(player.UserId)
+    local userData = cacheService.getUserData(userId)
+
+    if userData then
+        -- 先保存数据再清理
         DataManager.savePlayerData(player)
-        playerDataCache[player.UserId] = nil
+        cacheService.clearUserData(userId)
         lastSaveTime[player.UserId] = nil
+        print("🧹 清理玩家 " .. player.Name .. " 的缓存数据")
     end
 end
 
