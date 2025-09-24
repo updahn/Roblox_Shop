@@ -216,23 +216,6 @@ local function createSpawnEffect(position)
     end)
 end
 
--- 创建销毁特效（已禁用爆炸效果）
-local function createDestroyEffect(position)
-    -- 爆炸效果已被禁用，无人机消失时不再显示爆炸
-    return
-
-    --[[
-    if not Config.DRONE_CONFIG.EFFECTS.DESTROY_EFFECT then return end
-
-    -- 创建爆炸特效
-    local explosion = Instance.new("Explosion")
-    explosion.Position = position
-    explosion.BlastRadius = 5
-    explosion.BlastPressure = 0 -- 不产生物理效果
-    explosion.Parent = workspace
-    --]]
-end
-
 -- 尝试从单个模型ID加载无人机
 local function tryLoadModelFromId(assetId)
     -- 提取纯数字ID（去掉rbxassetid://前缀）
@@ -420,71 +403,105 @@ local function loadDroneModel()
     return drone
 end
 
--- 查找攻击目标
+-- 查找攻击目标（按优先级：玩家 > NPC > 靶子）
 local function findNearestTarget(dronePosition, attackRange, ownerPlayer)
-    local nearestTarget = nil
-    local nearestDistance = attackRange
-    local targetType = "none"  -- "target", "player", "npc", "none"
+    local targets = {
+        players = {},
+        npcs = {},
+        targets = {}
+    }
 
-    -- 优先查找靶子（在Workspace.Targets文件夹中）
+    -- 收集所有可能的目标
+
+    -- 1. 查找其他玩家（最高优先级）
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= ownerPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local distance = (player.Character.HumanoidRootPart.Position - dronePosition).Magnitude
+            if distance <= attackRange then
+                table.insert(targets.players, {
+                    target = player.Character,
+                    distance = distance,
+                    type = "player",
+                    priority = Config.DRONE_CONFIG.TARGET_PRIORITY.PLAYERS
+                })
+            end
+        end
+    end
+
+    -- 2. 查找NPC（中等优先级）
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            -- 检查是否是玩家角色
+            local isPlayerCharacter = false
+            for _, player in pairs(Players:GetPlayers()) do
+                if player.Character == obj then
+                    isPlayerCharacter = true
+                    break
+                end
+            end
+
+            if not isPlayerCharacter then
+                local distance = (obj.HumanoidRootPart.Position - dronePosition).Magnitude
+                if distance <= attackRange then
+                    table.insert(targets.npcs, {
+                        target = obj,
+                        distance = distance,
+                        type = "npc",
+                        priority = Config.DRONE_CONFIG.TARGET_PRIORITY.NPCS
+                    })
+                end
+            end
+        end
+    end
+
+    -- 3. 查找靶子（最低优先级）
     local targetsFolder = workspace:FindFirstChild("Targets")
     if targetsFolder then
         for _, targetModel in pairs(targetsFolder:GetChildren()) do
-            -- 检查靶子是否是有效的Model并且有活跃的Base部件
             if targetModel:IsA("Model") then
                 local basePart = targetModel:FindFirstChild("Base")
                 if basePart and basePart:IsA("Part") and basePart.Transparency == 0 then
                     local distance = (basePart.Position - dronePosition).Magnitude
-                    if distance < nearestDistance then
-                        nearestTarget = basePart  -- 返回Base部件作为攻击目标
-                        nearestDistance = distance
-                        targetType = "target"
+                    if distance <= attackRange then
+                        table.insert(targets.targets, {
+                            target = basePart,
+                            distance = distance,
+                            type = "target",
+                            priority = Config.DRONE_CONFIG.TARGET_PRIORITY.TARGETS,
+                            height = basePart.Position.Y  -- 保存靶子高度信息
+                        })
                     end
                 end
             end
         end
     end
 
-    -- 如果没有找到靶子，再查找范围内的玩家（除了拥有者）
-    if not nearestTarget then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= ownerPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                local distance = (player.Character.HumanoidRootPart.Position - dronePosition).Magnitude
-                if distance < nearestDistance then
-                    nearestTarget = player.Character
-                    nearestDistance = distance
-                    targetType = "player"
-                end
-            end
+    -- 按优先级选择目标
+    local allTargets = {}
+
+    -- 添加所有目标到统一列表
+    for _, targetList in pairs(targets) do
+        for _, targetData in pairs(targetList) do
+            table.insert(allTargets, targetData)
         end
     end
 
-    -- 最后查找范围内的NPC（查找Humanoid但不是玩家的角色）
-    if not nearestTarget then
-        for _, obj in pairs(workspace:GetChildren()) do
-            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
-                -- 检查是否是玩家角色
-                local isPlayerCharacter = false
-                for _, player in pairs(Players:GetPlayers()) do
-                    if player.Character == obj then
-                        isPlayerCharacter = true
-                        break
-                    end
-                end
-
-                if not isPlayerCharacter then
-                    local distance = (obj.HumanoidRootPart.Position - dronePosition).Magnitude
-                    if distance < nearestDistance then
-                        nearestTarget = obj
-                        nearestDistance = distance
-                        targetType = "npc"
-                    end
-                end
-            end
+    -- 按优先级和距离排序
+    table.sort(allTargets, function(a, b)
+        if a.priority ~= b.priority then
+            return a.priority < b.priority  -- 优先级越小越优先
+        else
+            return a.distance < b.distance  -- 同优先级按距离排序
         end
+    end)
+
+    -- 返回最优目标
+    if #allTargets > 0 then
+        local bestTarget = allTargets[1]
+        return bestTarget.target, bestTarget.type, bestTarget.height
     end
 
-    return nearestTarget, targetType
+    return nil, "none", nil
 end
 
 -- 无人机攻击目标
@@ -538,7 +555,7 @@ local function attackTarget(drone, target, targetType)
 
         -- 直接在服务端处理靶子伤害 - 获取TargetService
         local success, TargetService = pcall(function()
-            return require(script.Parent.Parent.utils:WaitForChild("TargetService"))
+            return require(game:GetService("ServerScriptService").utils:WaitForChild("TargetService"))
         end)
 
         if success and TargetService then
@@ -582,7 +599,7 @@ local function attackTarget(drone, target, targetType)
     return true
 end
 
--- 无人机移动逻辑
+-- 无人机移动逻辑（包含高度控制）
 local function updateDroneMovement(droneData)
     local drone = droneData.model
     local player = droneData.owner
@@ -602,6 +619,16 @@ local function updateDroneMovement(droneData)
     local playerPos = player.Character.HumanoidRootPart.Position
     local currentPos = body.Position
     local targetPos
+    local targetHeight
+
+    -- 检查是否有当前攻击目标来调整高度
+    local currentTarget = droneData.currentTarget
+    local targetSpecificHeight = nil
+
+    if currentTarget and currentTarget.type == "target" and currentTarget.height then
+        -- 如果正在攻击靶子，调整到靶子高度
+        targetSpecificHeight = currentTarget.height + Config.DRONE_CONFIG.HEIGHT_CONTROL.TARGET_OFFSET
+    end
 
     if mode == Config.DRONE_CONFIG.MODES.FOLLOW then
         -- 跟随模式：根据玩家朝向智能跟随
@@ -610,13 +637,21 @@ local function updateDroneMovement(droneData)
 
         -- 计算跟随位置（在玩家身后上方）
         local behindOffset = -lookDirection * Config.DRONE_CONFIG.FOLLOW_DISTANCE
-        local heightOffset = Vector3.new(0, Config.DRONE_CONFIG.FOLLOW_HEIGHT, 0)
+
+        -- 根据是否有特定目标决定高度
+        if targetSpecificHeight then
+            targetHeight = targetSpecificHeight
+        else
+            targetHeight = Config.DRONE_CONFIG.FOLLOW_HEIGHT
+        end
+
+        local heightOffset = Vector3.new(0, targetHeight, 0)
         targetPos = playerPos + behindOffset + heightOffset
 
         -- 添加一些随机偏移以避免过于僵硬的跟随
         local randomOffset = Vector3.new(
             (math.random() - 0.5) * 2,
-            (math.random() - 0.5) * 1,
+            (math.random() - 0.5) * 0.5,  -- 减少Y轴随机偏移
             (math.random() - 0.5) * 2
         )
         targetPos = targetPos + randomOffset
@@ -626,7 +661,23 @@ local function updateDroneMovement(droneData)
             -- 如果没有设定驻守位置，使用当前位置
             droneData.guardPosition = currentPos
         end
+
         targetPos = droneData.guardPosition
+
+        -- 如果有特定目标，调整驻守高度
+        if targetSpecificHeight then
+            targetPos = Vector3.new(targetPos.X, targetSpecificHeight, targetPos.Z)
+        end
+    end
+
+    -- 应用高度限制
+    if Config.DRONE_CONFIG.HEIGHT_CONTROL.AUTO_ADJUST then
+        targetPos = Vector3.new(
+            targetPos.X,
+            math.max(Config.DRONE_CONFIG.HEIGHT_CONTROL.MIN_HEIGHT,
+                    math.min(Config.DRONE_CONFIG.HEIGHT_CONTROL.MAX_HEIGHT, targetPos.Y)),
+            targetPos.Z
+        )
     end
 
     -- 更新目标位置
@@ -636,7 +687,7 @@ local function updateDroneMovement(droneData)
     if Config.DEBUG and Config.DEBUG.VERBOSE_LOGGING then
         local distance = (currentPos - targetPos).Magnitude
         if distance > 1 then
-            log("无人机移动:", player.Name, "模式:", mode, "距离目标:", math.floor(distance), "studs")
+            log("无人机移动:", player.Name, "模式:", mode, "高度:", math.floor(targetPos.Y), "距离目标:", math.floor(distance), "studs")
         end
     end
 end
@@ -695,7 +746,8 @@ function DroneService.spawnDrone(player: Player)
         mode = Config.DRONE_CONFIG.MODES.FOLLOW,
         spawnTime = tick(),
         lastAttackTime = 0,
-        guardPosition = nil
+        guardPosition = nil,
+        currentTarget = nil  -- 当前攻击目标信息
     }
 
     activeDrones[player] = droneData
@@ -712,11 +764,6 @@ function DroneService.recallDrone(player: Player)
     local droneData = activeDrones[player]
     if not droneData then
         return false, "您没有活跃的无人机"
-    end
-
-    -- 创建销毁特效
-    if droneData.model and droneData.model.PrimaryPart then
-        createDestroyEffect(droneData.model.PrimaryPart.Position)
     end
 
     -- 销毁无人机模型
@@ -789,8 +836,6 @@ local function mainLoop()
         -- 检查无人机是否超时
         local timeElapsed = currentTime - droneData.spawnTime
         if timeElapsed >= Config.DRONE_CONFIG.LIFETIME then
-            -- 自动销毁无人机
-            createDestroyEffect(droneData.model.PrimaryPart.Position)
             droneData.model:Destroy()
             activeDrones[player] = nil
 
@@ -806,9 +851,16 @@ local function mainLoop()
         -- 攻击逻辑
         if (currentTime - droneData.lastAttackTime) >= Config.DRONE_CONFIG.ATTACK_INTERVAL then
             local dronePos = droneData.model.PrimaryPart.Position
-            local target, targetType = findNearestTarget(dronePos, Config.DRONE_CONFIG.ATTACK_RANGE, player)
+            local target, targetType, targetHeight = findNearestTarget(dronePos, Config.DRONE_CONFIG.ATTACK_RANGE, player)
 
             if target then
+                -- 更新当前目标信息（用于高度控制）
+                droneData.currentTarget = {
+                    target = target,
+                    type = targetType,
+                    height = targetHeight
+                }
+
                 local attackSuccess = attackTarget(droneData.model, target, targetType)
                 if attackSuccess then
                     droneData.lastAttackTime = currentTime
@@ -816,11 +868,16 @@ local function mainLoop()
                     -- 通知客户端攻击事件
                     local targetName = targetType == "target" and (target.Parent and target.Parent.Name or target.Name) or target.Name
                     Events.Drone.DroneAttack:FireClient(player, targetName)
-                    log("✅ 无人机攻击成功：类型=" .. targetType .. ", 目标=" .. targetName)
+                    log("✅ 无人机攻击成功：类型=" .. targetType .. ", 目标=" .. targetName ..
+                        (targetHeight and (", 高度=" .. math.floor(targetHeight)) or ""))
                 else
                     -- 攻击失败，可能是目标已消失，重置攻击时间以便立即寻找新目标
                     droneData.lastAttackTime = currentTime - Config.DRONE_CONFIG.ATTACK_INTERVAL + 0.1
+                    droneData.currentTarget = nil  -- 清除无效目标
                 end
+            else
+                -- 没有找到目标，清除当前目标信息
+                droneData.currentTarget = nil
             end
         end
     end

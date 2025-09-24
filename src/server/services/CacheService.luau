@@ -25,7 +25,20 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- 导入依赖
-local CacheManager = require(script.Parent.Parent.utils.CacheManager)
+local function getCacheManager()
+    local ServerScriptService = game:GetService("ServerScriptService")
+    local serverFolder = ServerScriptService:FindFirstChild("Server")
+    if serverFolder then
+        local srcFolder = serverFolder.Parent
+        local utilsFolder = srcFolder:FindFirstChild("utils")
+        if utilsFolder and utilsFolder:FindFirstChild("CacheManager") then
+            return require(utilsFolder.CacheManager)
+        end
+    end
+    error("❌ 无法加载CacheManager模块")
+end
+
+local CacheManager = getCacheManager()
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
 local Events = require(SharedModules:WaitForChild("ShopEvents"))
 
@@ -316,7 +329,7 @@ function CacheService.warmupCache()
 
     spawn(function()
         -- 预热商品数据
-        local DataStoreManager = require(script.Parent.Parent.data.DataStoreManager)
+        local DataStoreManager = require(game:GetService("ServerScriptService").Server.datastoreservice.DataStoreManager)
         local shopItems = DataStoreManager.getAllItems()
         if shopItems then
             CacheService.cacheShopItems(shopItems, 1800) -- 30分钟
@@ -362,7 +375,7 @@ local function handleForceRefresh(player, refreshType, targetId)
 
     elseif refreshType == "shop" then
         -- 刷新商店缓存（需要管理员权限）
-        local AdminService = require(script.Parent.AdminService)
+        local AdminService = require(game:GetService("ServerScriptService").Server.services.AdminService)
         if AdminService.isValidAdmin(player) then
             CacheService.refreshShopCache()
         else
@@ -371,7 +384,7 @@ local function handleForceRefresh(player, refreshType, targetId)
 
     elseif refreshType == "config" then
         -- 刷新系统配置缓存（需要管理员权限）
-        local AdminService = require(script.Parent.AdminService)
+        local AdminService = require(game:GetService("ServerScriptService").Server.services.AdminService)
         if AdminService.isValidAdmin(player) then
             CacheService.refreshSystemConfig()
         else
@@ -380,7 +393,7 @@ local function handleForceRefresh(player, refreshType, targetId)
 
     elseif refreshType == "all" then
         -- 全局刷新（需要管理员权限）
-        local AdminService = require(script.Parent.AdminService)
+        local AdminService = require(game:GetService("ServerScriptService").Server.services.AdminService)
         if AdminService.isValidAdmin(player) then
             CacheService.globalRefresh()
         else
@@ -392,7 +405,7 @@ end
 -- 处理缓存统计信息请求
 local function handleGetCacheStats(player)
     -- 需要管理员权限
-    local AdminService = require(script.Parent.AdminService)
+    local AdminService = require(game:GetService("ServerScriptService").Server.services.AdminService)
     if not AdminService.isValidAdmin(player) then
         return {
             success = false,
@@ -410,7 +423,7 @@ end
 -- 处理缓存管理操作
 local function handleManageCache(player, action, params)
     -- 需要管理员权限
-    local AdminService = require(script.Parent.AdminService)
+    local AdminService = require(game:GetService("ServerScriptService").Server.services.AdminService)
     if not AdminService.isValidAdmin(player) then
         print("⚠️ [CacheService] 非管理员尝试缓存管理操作:", player.Name, action)
         return
@@ -455,7 +468,7 @@ function CacheService.onPlayerAdded(player)
         wait(2) -- 等待玩家完全加载
 
         -- 预热用户基础数据
-        local DataStoreManager = require(script.Parent.Parent.data.DataStoreManager)
+        local DataStoreManager = require(game:GetService("ServerScriptService").Server.datastoreservice.DataStoreManager)
         local userData = DataStoreManager.getUserData(userId)
         if userData then
             CacheService.cacheUserData(userId, userData)

@@ -11,9 +11,21 @@ local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
 local Config = require(SharedModules:WaitForChild("Config"))
 
 -- 导入数据服务模块
-local DataStoreManager = require(script.Parent.Parent.data:WaitForChild("DataStoreManager"))
-local UserDataService = require(script.Parent.Parent.data:WaitForChild("UserDataService"))
-local AdminDataService = require(script.Parent.Parent.data:WaitForChild("AdminDataService"))
+local function getDataStoreModule(moduleName)
+    local ServerScriptService = game:GetService("ServerScriptService")
+    local serverFolder = ServerScriptService:FindFirstChild("Server")
+    if serverFolder then
+        local datastoreFolder = serverFolder:FindFirstChild("datastoreservice")
+        if datastoreFolder and datastoreFolder:FindFirstChild(moduleName) then
+            return require(datastoreFolder[moduleName])
+        end
+    end
+    error("❌ 无法加载数据服务模块: " .. moduleName)
+end
+
+local DataStoreManager = getDataStoreModule("DataStoreManager")
+local UserDataService = getDataStoreModule("UserDataService")
+local AdminDataService = getDataStoreModule("AdminDataService")
 
 -- 用户会话存储（替换令牌系统）
 local userSessions = {}

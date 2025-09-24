@@ -10,7 +10,25 @@ local UserService = {}
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
 local Config = require(SharedModules:WaitForChild("Config"))
 local Events = require(SharedModules:WaitForChild("ShopEvents"))
-local DataService = require(script.Parent:WaitForChild("DataService"))
+-- 从services文件夹获取DataService
+local DataService = nil
+local success, result = pcall(function()
+    local ServerScriptService = game:GetService("ServerScriptService")
+    local serverFolder = ServerScriptService:FindFirstChild("Server")
+    if serverFolder then
+        local servicesFolder = serverFolder:FindFirstChild("services")
+        if servicesFolder and servicesFolder:FindFirstChild("DataService") then
+            return require(servicesFolder.DataService)
+        end
+    end
+    return nil
+end)
+
+if success and result then
+    DataService = result
+else
+    error("❌ 无法加载DataService模块")
+end
 
 -- 玩家会话管理
 local playerSessions = {} -- 存储已登录的玩家
@@ -61,7 +79,7 @@ function UserService.authenticatePlayer(player: Player)
             spawn(function()
                 wait(1)
                 local success = pcall(function()
-                    local AdminDataService = require(script.Parent.Parent.data:WaitForChild("AdminDataService"))
+                    local AdminDataService = require(game:GetService("ServerScriptService").Server.datastoreservice:WaitForChild("AdminDataService"))
                     AdminDataService.promoteToAdmin(userId)
                 end)
                 if success then
@@ -156,7 +174,7 @@ function UserService.refreshPlayerData(player: Player)
     end
 
     -- 清除会员状态缓存以确保获取最新数据
-    local UserDataService = DataService.getUserDataService and DataService.getUserDataService() or require(script.Parent.Parent.data:WaitForChild("UserDataService"))
+    local UserDataService = DataService.getUserDataService and DataService.getUserDataService() or require(game:GetService("ServerScriptService").Server.datastoreservice:WaitForChild("UserDataService"))
     if UserDataService.clearMembershipCache then
         UserDataService.clearMembershipCache(session.userId)
     end
@@ -302,7 +320,7 @@ local function handleBuyItem(player: Player, itemId: string, quantity: number)
     if success then
         -- 如果购买的是会员商品，特殊处理确保会员状态更新
         if isMembershipItem then
-            local UserDataService = require(script.Parent.Parent.data:WaitForChild("UserDataService"))
+            local UserDataService = require(game:GetService("ServerScriptService").Server.datastoreservice:WaitForChild("UserDataService"))
             if UserDataService.clearMembershipCache then
                 UserDataService.clearMembershipCache(session.userId)
                 print("🧹 [购买] 清除会员缓存:", player.Name, itemId)

@@ -5,13 +5,45 @@
 
     "ReplicatedStorage": {
       "Shared": {
+        "$className": "Folder",
         "$path": "src/shared"
+      },
+      "SharedModules": {
+        "$className": "Folder",
+        "Config": {
+          "$path": "src/config/Config.luau"
+        },
+        "EnvironmentManager": {
+          "$path": "src/utils/EnvironmentManager.luau"
+        },
+        "ShopEvents": {
+          "$path": "src/shared/Events.luau"
+        },
+        "ShopData": {
+          "$path": "src/shared/ShopData.luau"
+        }
       }
     },
 
     "ServerScriptService": {
       "Server": {
         "$path": "src/server"
+      },
+      "utils": {
+        "$className": "Folder",
+        "$path": "src/utils"
+      },
+      "config": {
+        "$className": "Folder",
+        "$path": "src/config"
+      },
+      "constant": {
+        "$className": "Folder",
+        "$path": "src/constant"
+      },
+      "common": {
+        "$className": "Folder",
+        "$path": "src/common"
       }
     },
 
