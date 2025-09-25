@@ -430,12 +430,65 @@ local function loadDroneModel()
 end
 
 -- 查找攻击目标（按优先级：玩家 > NPC > 靶子）
-local function findNearestTarget(dronePosition, attackRange, ownerPlayer)
+-- 新增参数：currentTarget 用于目标锁定逻辑
+local function findNearestTarget(dronePosition, attackRange, ownerPlayer, currentTarget)
     local targets = {
         players = {},
         npcs = {},
         targets = {}
     }
+
+    -- 目标锁定机制：如果当前目标仍然有效且在范围内，优先保持锁定
+    if currentTarget and currentTarget.target then
+        local target = currentTarget.target
+        local isValid = false
+        local currentDistance = 0
+
+        -- 检查当前目标是否仍然有效
+        if currentTarget.type == "player" then
+            if target.Parent and Players:GetPlayerFromCharacter(target) and target:FindFirstChild("HumanoidRootPart") then
+                currentDistance = (target.HumanoidRootPart.Position - dronePosition).Magnitude
+                isValid = currentDistance <= attackRange * 1.2  -- 给予20%的额外范围容忍度
+            end
+        elseif currentTarget.type == "npc" then
+            if target and target.Parent and target:FindFirstChild("HumanoidRootPart") and target:FindFirstChild("Humanoid") then
+                currentDistance = (target.HumanoidRootPart.Position - dronePosition).Magnitude
+                isValid = currentDistance <= attackRange * 1.2
+            end
+        elseif currentTarget.type == "target" then
+            if target and target.Parent and target.Transparency == 0 then
+                currentDistance = (target.Position - dronePosition).Magnitude
+                isValid = currentDistance <= attackRange * 1.2
+            end
+        end
+
+        -- 如果当前目标仍然有效，继续锁定它（除非有更高优先级的目标出现）
+        if isValid then
+            -- 只有当发现更高优先级的目标时才切换
+            local currentPriority = Config.DRONE_CONFIG.TARGET_PRIORITY[string.upper(currentTarget.type .. "S")] or 999
+
+            -- 快速检查是否有更高优先级的目标
+            local hasHigherPriorityTarget = false
+
+            -- 检查玩家（最高优先级）
+            if currentPriority > Config.DRONE_CONFIG.TARGET_PRIORITY.PLAYERS then
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player ~= ownerPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local distance = (player.Character.HumanoidRootPart.Position - dronePosition).Magnitude
+                        if distance <= attackRange then
+                            hasHigherPriorityTarget = true
+                            break
+                        end
+                    end
+                end
+            end
+
+            -- 如果没有更高优先级目标，保持当前锁定
+            if not hasHigherPriorityTarget then
+                return currentTarget.target, currentTarget.type, currentTarget.height
+            end
+        end
+    end
 
     -- 收集所有可能的目标
 
@@ -673,10 +726,11 @@ local function updateDroneMovement(droneData)
         targetPos = playerPos + behindOffset + heightOffset
 
         -- 添加一些随机偏移以避免过于僵硬的跟随
+        local randomIntensity = currentTarget and 0.5 or 1.0  -- 有目标时减少随机偏移
         local randomOffset = Vector3.new(
-            (math.random() - 0.5) * 2,
-            (math.random() - 0.5) * 0.5,  -- 减少Y轴随机偏移
-            (math.random() - 0.5) * 2
+            (math.random() - 0.5) * 2 * randomIntensity,
+            (math.random() - 0.5) * 0.5 * randomIntensity,  -- 减少Y轴随机偏移
+            (math.random() - 0.5) * 2 * randomIntensity
         )
         targetPos = targetPos + randomOffset
     else
@@ -780,6 +834,7 @@ function DroneService.spawnDrone(player: Player)
         mode = Config.DRONE_CONFIG.MODES.FOLLOW,
         spawnTime = tick(),
         lastAttackTime = 0,
+        lastTargetSwitchTime = 0,  -- 新增：目标切换时间记录
         guardPosition = nil,
         currentTarget = nil  -- 当前攻击目标信息
     }
@@ -885,15 +940,28 @@ local function mainLoop()
         -- 攻击逻辑
         if (currentTime - droneData.lastAttackTime) >= Config.DRONE_CONFIG.ATTACK_INTERVAL then
             local dronePos = droneData.model.PrimaryPart.Position
-            local target, targetType, targetHeight = findNearestTarget(dronePos, Config.DRONE_CONFIG.ATTACK_RANGE, player)
+            local target, targetType, targetHeight = findNearestTarget(dronePos, Config.DRONE_CONFIG.ATTACK_RANGE, player, droneData.currentTarget)
 
             if target then
+                -- 检查是否切换了目标
+                local targetChanged = false
+                if not droneData.currentTarget or droneData.currentTarget.target ~= target then
+                    targetChanged = true
+                    droneData.lastTargetSwitchTime = currentTime
+                end
+
                 -- 更新当前目标信息（用于高度控制）
                 droneData.currentTarget = {
                     target = target,
                     type = targetType,
                     height = targetHeight
                 }
+
+                -- 记录目标切换
+                if targetChanged then
+                    local targetName = targetType == "target" and (target.Parent and target.Parent.Name or target.Name) or target.Name
+                    log("🎯 无人机切换目标：", targetName, "类型：", targetType)
+                end
 
                 local attackSuccess = attackTarget(droneData.model, target, targetType)
                 if attackSuccess then
