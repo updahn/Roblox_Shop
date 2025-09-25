@@ -6,7 +6,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- 等待共享模块
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
 local Config = require(SharedModules:WaitForChild("Config"))
-local ShopEvents = require(SharedModules:WaitForChild("ShopEvents"))
+
+-- 控制器引用（在初始化时设置）
+local UserController = nil
+local AdminController = nil
 -- 获取ShopUtils模块
 local function getShopUtils()
     local Players = game:GetService("Players")
@@ -30,6 +33,13 @@ local ShopUtils = getShopUtils()
 local player = Players.LocalPlayer
 
 local ShopRecords = {}
+
+-- 设置控制器
+function ShopRecords.setControllers(userController, adminController)
+    UserController = userController
+    AdminController = adminController
+    print("✅ [ShopRecords] 控制器已设置")
+end
 
 -- 存储当前显示的scrollFrame引用，用于更新
 local currentScrollFrame = nil
@@ -78,8 +88,21 @@ function ShopRecords.showPurchaseRecords(scrollFrame, playerData, showAdminPanel
     titleText.TextXAlignment = Enum.TextXAlignment.Center
     titleText.Parent = titleFrame
 
-    -- 管理员控制按钮（仅管理员可见）
-    local isAdmin = Config.isValidAdmin(player)
+    -- 管理员控制按钮（仅管理员可见）- 使用AdminController检查权限
+    local isAdmin = false
+    local success, AdminController = pcall(function()
+        return require(script.Parent.Parent.controller.AdminController)
+    end)
+
+    if success and AdminController then
+        local adminCheckSuccess, adminResult = pcall(function()
+            return AdminController.checkPermission()
+        end)
+        if adminCheckSuccess then
+            isAdmin = adminResult
+        end
+    end
+
     local hasAdminPanelFunction = showAdminPanel ~= nil
 
     if isAdmin and showAdminPanel then
@@ -134,7 +157,10 @@ function ShopRecords.showPurchaseRecords(scrollFrame, playerData, showAdminPanel
     isRequestingTransactions = true
     lastRequestTime = currentTime
     pendingRequestCount = 0 -- 重置计数器
-    ShopEvents.User.GetTransactions:FireServer(50, 0, nil) -- 获取最近50条记录
+    -- 通过控制器获取交易记录
+    if UserController then
+        UserController.requestTransactions(50, 0, nil)
+    end
 
     scrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPos + 80)
 end
@@ -327,9 +353,9 @@ end
 -- 显示记录查看界面（为了兼容性）
 function ShopRecords.showRecordsUI(playerName)
     print("📊 请求查看 " .. (playerName or "当前玩家") .. " 的记录")
-    -- 请求服务器获取该玩家的记录
-    if ShopEvents.Admin.GetUserHistory then
-        ShopEvents.Admin.GetUserHistory:FireServer(playerName)
+    -- 通过管理员控制器请求用户历史记录
+    if AdminController then
+        AdminController.requestUserHistory(playerName)
     end
 end
 

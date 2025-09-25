@@ -28,8 +28,8 @@ local MessagingService = game:GetService("MessagingService")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 
--- 环境管理器
-local EnvironmentManager = require(game:GetService("ReplicatedStorage").SharedModules.EnvironmentManager)
+-- 环境检测
+local isStudio = RunService:IsStudio()
 
 local CacheManager = {}
 
@@ -124,7 +124,7 @@ local stats = {
 local serverId = HttpService:GenerateGUID(false)
 
 -- 是否启用（在Studio环境中可能禁用MessagingService）
-local isEnabled = not EnvironmentManager.isStudio()
+local isEnabled = not isStudio
 
 -- ==============================================
 -- 工具函数
@@ -652,7 +652,7 @@ function CacheManager.initialize()
     end)
 
     -- 启动统计任务（每5分钟打印一次统计）
-    if EnvironmentManager.isStudio() then
+    if isStudio then
         spawn(function()
             while true do
                 wait(300) -- 5分钟

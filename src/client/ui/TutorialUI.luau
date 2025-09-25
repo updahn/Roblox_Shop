@@ -411,6 +411,12 @@ function TutorialUI.isShowing()
     return isShowing
 end
 
+-- 设置控制器（为了与其他UI模块保持一致的接口）
+function TutorialUI.setControllers()
+    -- TutorialUI不需要控制器，但保持接口一致
+    print("✅ [TutorialUI] 控制器已设置（无需控制器）")
+end
+
 -- 初始化
 function TutorialUI.initialize()
     -- 延迟3秒显示教程，给玩家一些时间适应

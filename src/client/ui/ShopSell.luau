@@ -15,17 +15,15 @@ local function getSharedModule(moduleName, timeout)
     error("❌ 无法找到共享模块: " .. moduleName)
 end
 
-local ShopData, ShopEvents
+local ShopData
 local success, result = pcall(function()
     ShopData = require(getSharedModule("ShopData"))
-    ShopEvents = require(getSharedModule("ShopEvents"))
     return true
 end)
 
 if not success then
     warn("❌ [ShopSell] 共享模块加载失败:", result)
     ShopData = {}
-    ShopEvents = {User = {}, Admin = {}}
 end
 -- 获取ShopUtils模块
 local function getShopUtils()

@@ -20,6 +20,32 @@ local DroneConfig = Config.DRONE_CONFIG
 -- 活跃无人机管理
 local activeDrones = {} -- [player] = droneData
 
+-- 延迟加载TargetService，避免循环依赖
+local TargetService = nil
+
+-- 获取TargetService（延迟初始化）
+local function getTargetService()
+    if not TargetService then
+        local success, result = pcall(function()
+            local ServerScriptService = game:GetService("ServerScriptService")
+            local serverFolder = ServerScriptService:FindFirstChild("Server")
+            if serverFolder then
+                local servicesFolder = serverFolder:FindFirstChild("services")
+                if servicesFolder and servicesFolder:FindFirstChild("TargetService") then
+                    return require(servicesFolder.TargetService)
+                end
+            end
+            return nil
+        end)
+        if success and result then
+            TargetService = result
+        else
+            warn("❌ DroneService: 无法加载 TargetService - " .. tostring(result))
+        end
+    end
+    return TargetService
+end
+
 -- ==============================================
 -- 内部工具函数
 -- ==============================================
@@ -554,12 +580,10 @@ local function attackTarget(drone, target, targetType)
         local ownerName = drone.Owner.Value.Name
 
         -- 直接在服务端处理靶子伤害 - 获取TargetService
-        local success, TargetService = pcall(function()
-            return require(game:GetService("ServerScriptService").utils:WaitForChild("TargetService"))
-        end)
+        local TargetServiceInstance = getTargetService()
 
-        if success and TargetService then
-            local destroyed = TargetService.damageTarget(targetId, Config.DRONE_CONFIG.ATTACK_DAMAGE, ownerName)
+        if TargetServiceInstance and TargetServiceInstance.damageTarget then
+            local destroyed = TargetServiceInstance.damageTarget(targetId, Config.DRONE_CONFIG.ATTACK_DAMAGE, ownerName)
             log("🔥 无人机攻击靶子:", targetId, "造成伤害:", Config.DRONE_CONFIG.ATTACK_DAMAGE, destroyed and "(被摧毁)" or "")
 
             -- 如果靶子被摧毁，创建爆炸效果
@@ -567,7 +591,7 @@ local function attackTarget(drone, target, targetType)
                 createExplosionEffect(targetPos)
             end
         else
-            log("❌ 无法获取TargetService来处理靶子伤害")
+            log("❌ 无法获取TargetService来处理靶子伤害 - 服务可能未初始化或方法不存在")
         end
     else
         -- 攻击玩家或NPC
@@ -723,14 +747,24 @@ function DroneService.spawnDrone(player: Player)
     -- 创建生成特效
     createSpawnEffect(spawnPos)
 
-    -- 播放生成音效
-    local sound = Instance.new("Sound")
-    sound.SoundId = Config.DRONE_CONFIG.SOUNDS.SPAWN
-    sound.Volume = Config.DRONE_CONFIG.SOUNDS.VOLUME.SPAWN
-    sound.Parent = droneModel.PrimaryPart
-    sound:Play()
-    sound.Ended:Connect(function()
-        sound:Destroy()
+    -- 播放生成音效（带错误处理）
+    pcall(function()
+        local sound = Instance.new("Sound")
+        sound.SoundId = Config.DRONE_CONFIG.SOUNDS.SPAWN
+        sound.Volume = Config.DRONE_CONFIG.SOUNDS.VOLUME.SPAWN
+        sound.Parent = droneModel.PrimaryPart
+
+        local success = pcall(function()
+            sound:Play()
+        end)
+
+        if not success then
+            log("⚠️ 生成音效播放失败")
+        end
+
+        sound.Ended:Connect(function()
+            sound:Destroy()
+        end)
     end)
 
     -- 添加Owner属性到无人机模型

@@ -107,40 +107,43 @@ function TargetService.createTarget(position, customHeight)
     -- 设置PrimaryPart为主要的靶子部分
     targetModel.PrimaryPart = targetPart
 
-    -- 添加标识牌
-    if Config.TARGETS.MARKER.ENABLED then
-        local gui = Instance.new("BillboardGui")
-        gui.Size = UDim2.new(0, 100, 0, 50)
-        gui.StudsOffset = Vector3.new(0, 4, 0)
-        gui.Parent = targetPart
+    -- 在服务端创建血条UI
+    local healthGui = Instance.new("BillboardGui")
+    healthGui.Size = UDim2.new(0, 80, 0, 40)
+    healthGui.StudsOffset = Vector3.new(0, 4, 0)
+    healthGui.Parent = targetPart
 
-        local textLabel = Instance.new("TextLabel")
-        textLabel.Size = UDim2.new(1, 0, 1, 0)
-        textLabel.BackgroundTransparency = 1
-        textLabel.Text = Config.TARGETS.MARKER.TEXT
-        textLabel.TextColor3 = Config.TARGETS.MARKER.TEXT_COLOR
-        textLabel.TextSize = Config.TARGETS.MARKER.TEXT_SIZE
-        textLabel.TextStrokeTransparency = 0.5
-        textLabel.Parent = gui
+    -- 靶子ID标签
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 0.4, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = targetId
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textLabel.TextSize = 12
+    textLabel.TextStrokeTransparency = 0.5
+    textLabel.Parent = healthGui
 
-        -- 血条
-        local healthBar = Instance.new("Frame")
-        healthBar.Size = UDim2.new(0.8, 0, 0.2, 0)
-        healthBar.Position = UDim2.new(0.1, 0, 1.2, 0)
-        healthBar.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-        healthBar.BorderSizePixel = 0
-        healthBar.Parent = gui
+    -- 血条背景
+    local healthBar = Instance.new("Frame")
+    healthBar.Size = UDim2.new(0.8, 0, 0.2, 0)
+    healthBar.Position = UDim2.new(0.1, 0, 1.2, 0)
+    healthBar.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+    healthBar.BorderSizePixel = 0
+    healthBar.Parent = healthGui
 
-        local healthFill = Instance.new("Frame")
-        healthFill.Size = UDim2.new(1, 0, 1, 0)
-        healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        healthFill.BorderSizePixel = 0
-        healthFill.Name = "HealthFill"
-        healthFill.Parent = healthBar
-    end
+    -- 血条填充
+    local healthFill = Instance.new("Frame")
+    healthFill.Size = UDim2.new(1, 0, 1, 0)
+    healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    healthFill.BorderSizePixel = 0
+    healthFill.Name = "HealthFill"
+    healthFill.Parent = healthBar
 
+    -- 保存UI引用到targetData中
     targetData.part = targetPart
     targetData.model = targetModel
+    targetData.healthGui = healthGui
+    targetData.healthFill = healthFill
     targets[targetId] = targetData
 
     print("🎯 创建靶子:", targetId, "位置:", position)
@@ -165,28 +168,22 @@ function TargetService.damageTarget(targetId, damage, attackerId)
 
     target.health = math.max(0, target.health - damage)
 
-    -- 更新血条显示
-    if target.part then
-        local gui = target.part:FindFirstChild("BillboardGui")
-        if gui then
-            local healthFill = gui:FindFirstChild("Frame"):FindFirstChild("HealthFill")
-            if healthFill then
-                local healthPercent = target.health / target.maxHealth
-                healthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
+    -- 在服务端直接更新血条UI
+    if target.healthFill then
+        local healthPercent = target.health / target.maxHealth
+        target.healthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
 
-                -- 根据血量改变颜色
-                if healthPercent > 0.6 then
-                    healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-                elseif healthPercent > 0.3 then
-                    healthFill.BackgroundColor3 = Color3.fromRGB(255, 255, 0)
-                else
-                    healthFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-                end
-            end
+        -- 根据血量改变颜色
+        if healthPercent > 0.6 then
+            target.healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)  -- 绿色
+        elseif healthPercent > 0.3 then
+            target.healthFill.BackgroundColor3 = Color3.fromRGB(255, 255, 0)  -- 黄色
+        else
+            target.healthFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- 红色
         end
     end
 
-    print("🎯 靶子", targetId, "受到", damage, "点伤害，剩余血量:", target.health)
+    print("🎯 靶子", targetId, "受到", damage, "点伤害，剩余血量:", target.health .. "/" .. target.maxHealth)
 
     -- 通知所有客户端靶子受损
     Events.Target.TargetDamaged:FireAllClients(targetId, target.health, target.maxHealth, attackerId)
@@ -210,7 +207,7 @@ function TargetService.destroyTarget(targetId, destroyerId)
     target.alive = false
     target.respawnTime = tick() + Config.TARGETS.RESPAWN_TIME
 
-    -- 隐藏靶子
+    -- 隐藏靶子模型和UI
     if target.model then
         -- 隐藏模型中的所有部件
         for _, part in pairs(target.model:GetChildren()) do
@@ -219,14 +216,11 @@ function TargetService.destroyTarget(targetId, destroyerId)
                 part.CanCollide = false
             end
         end
+    end
 
-        -- 隐藏GUI
-        if target.part then
-            local gui = target.part:FindFirstChild("BillboardGui")
-            if gui then
-                gui.Enabled = false
-            end
-        end
+    -- 隐藏血条UI
+    if target.healthGui then
+        target.healthGui.Enabled = false
     end
 
     print("💥 靶子", targetId, "被摧毁，将在", Config.TARGETS.RESPAWN_TIME, "秒后重生")
@@ -246,7 +240,7 @@ function TargetService.respawnTarget(targetId)
     target.alive = true
     target.respawnTime = 0
 
-    -- 显示靶子
+    -- 显示靶子模型
     if target.model then
         -- 显示模型中的所有部件并恢复原始属性
         for _, part in pairs(target.model:GetChildren()) do
@@ -266,18 +260,14 @@ function TargetService.respawnTarget(targetId)
                 end
             end
         end
+    end
 
-        -- 显示GUI并重置血条
-        if target.part then
-            local gui = target.part:FindFirstChild("BillboardGui")
-            if gui then
-                gui.Enabled = true
-                local healthFill = gui:FindFirstChild("Frame"):FindFirstChild("HealthFill")
-                if healthFill then
-                    healthFill.Size = UDim2.new(1, 0, 1, 0)
-                    healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-                end
-            end
+    -- 显示并重置血条UI
+    if target.healthGui then
+        target.healthGui.Enabled = true
+        if target.healthFill then
+            target.healthFill.Size = UDim2.new(1, 0, 1, 0)  -- 满血
+            target.healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)  -- 绿色
         end
     end
 

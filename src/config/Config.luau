@@ -27,7 +27,7 @@ local Config = {}
 Config.ADMIN = {
     -- 默认管理员用户名列表（在这里添加需要设置为管理员的用户名）
     DEFAULT_ADMIN_USERNAMES = {
-        -- "updahn",
+        "updahn",
         -- 测试管理员
         "Player1",
         "Player2",
@@ -233,7 +233,7 @@ Config.DRONE_CONFIG = {
     -- 无人机音效配置
     SOUNDS = {
         SPAWN = "rbxasset://sounds/electronicpingshort.wav",
-        ATTACK = "rbxasset://sounds/impact_generic.mp3",
+        ATTACK = "rbxasset://sounds/impact_water.mp3",  -- 使用更稳定的音效
         DESTROY = "rbxasset://sounds/snap.wav",
         HOVER = "rbxasset://sounds/ambient.ogg",
         VOLUME = {
@@ -374,69 +374,6 @@ local ADMIN_CACHE_DURATION = 30
 -- 检查调试模式
 function Config.isDebugMode()
     return Config.DEBUG.ENABLED
-end
-
---[[
-客户端管理员权限验证函数
-通过 RemoteFunction 向服务器查询权限，带缓存机制
---]]
-function Config.isValidAdmin(player)
-    local RunService = game:GetService("RunService")
-
-    if RunService:IsServer() then
-        -- 服务器端直接返回false，应该使用 AdminService.isValidAdmin
-        warn("在服务器端调用 Config.isValidAdmin，请使用 AdminService.isValidAdmin")
-        return false
-    else
-        local cacheKey = player.Name
-        local currentTime = tick()
-
-        -- 检查缓存
-        if adminValidationCache[cacheKey] then
-            local cacheData = adminValidationCache[cacheKey]
-            if (currentTime - cacheData.timestamp) < ADMIN_CACHE_DURATION then
-                -- 缓存还有效，直接返回缓存结果
-                return cacheData.isAdmin
-            end
-        end
-
-        -- 客户端通过 RemoteFunction 查询
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-        print("🔍 [Config] 客户端权限检查:", player.Name)
-
-        local success, Events = pcall(function()
-            return require(ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("ShopEvents"))
-        end)
-
-        if not success or not Events then
-            print("❌ [Config] 无法加载Events模块")
-            return false
-        end
-
-        local checkAdminRemote = Events.Admin and Events.Admin.CheckPermission
-        if not checkAdminRemote then
-            print("❌ [Config] 找不到权限检查RemoteFunction")
-            return false
-        end
-
-        local success, result = pcall(function()
-            return checkAdminRemote:InvokeServer()
-        end)
-
-        if success then
-            -- 缓存结果
-            adminValidationCache[cacheKey] = {
-                isAdmin = result,
-                timestamp = currentTime
-            }
-            print("✅ [Config] 权限检查完成:", player.Name, "->", result)
-            return result
-        else
-            print("❌ [Config] 权限检查失败:", player.Name, "错误:", result)
-            return false
-        end
-    end
 end
 
 --[[

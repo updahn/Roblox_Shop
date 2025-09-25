@@ -8,13 +8,21 @@ local TweenService = game:GetService("TweenService")
 -- 等待共享模块
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
 local Config = require(SharedModules:WaitForChild("Config"))
-local ShopEvents = require(SharedModules:WaitForChild("ShopEvents"))
 local ShopUtils = require(game:GetService("StarterPlayer").StarterPlayerScripts.Client.functions:WaitForChild("ShopUtils"))
 local ShopRecords = require(game:GetService("StarterPlayer").StarterPlayerScripts.Client.ui:WaitForChild("ShopRecords"))
 
 local player = Players.LocalPlayer
 
+-- 控制器引用（在初始化时设置）
+local AdminController = nil
+
 local ShopAdminPanel = {}
+
+-- 设置控制器
+function ShopAdminPanel.setControllers(adminController)
+    AdminController = adminController
+    print("✅ [ShopAdminPanel] 控制器已设置")
+end
 
 -- UI 元素引用
 local adminFrame = nil
@@ -47,16 +55,27 @@ function ShopAdminPanel.showAdminPanel(screenGui, showNotification)
     -- 保存screenGui引用以供后续使用
     currentScreenGui = screenGui
 
-    -- 检查管理员权限 - 增加容错机制
+    -- 检查管理员权限 - 通过AdminController与服务通信
     local isAdmin = false
     print("🔍 [统一管理面板] 开始权限检查 - 玩家:", player.Name)
-    local adminCheckSuccess, adminResult = pcall(function()
-        return Config.isValidAdmin(player)
+
+    -- 导入AdminController
+    local success, AdminController = pcall(function()
+        return require(script.Parent.Parent.controller.AdminController)
     end)
 
-    if adminCheckSuccess then
-        isAdmin = adminResult
-        print("✅ [统一管理面板] Config权限检查成功:", player.Name, "->", isAdmin)
+    if success and AdminController then
+        -- 使用AdminController检查权限
+        local adminCheckSuccess, adminResult = pcall(function()
+            return AdminController.checkPermission()
+        end)
+
+        if adminCheckSuccess then
+            isAdmin = adminResult
+            print("✅ [统一管理面板] AdminController权限检查成功:", player.Name, "->", isAdmin)
+        end
+    else
+        print("❌ [统一管理面板] 无法加载AdminController")
     end
 
     if not isAdmin then
@@ -372,13 +391,14 @@ function ShopAdminPanel._showUsersPanel(showNotification)
 
     -- 请求所有玩家数据
     print("📡 [用户管理] 发送请求到服务器获取用户数据")
-    print("📡 [调试] 检查ShopEvents.Admin.GetAllUsers是否存在:", ShopEvents.Admin.GetAllUsers ~= nil)
+    print("📡 [调试] 使用AdminController事件系统")
 
-    if ShopEvents.Admin.GetAllUsers then
-        ShopEvents.Admin.GetAllUsers:FireServer()
-        print("📡 [调试] 已发送GetAllUsers请求到服务器")
+    -- 通过管理员控制器获取所有用户
+    if AdminController then
+        AdminController.requestAllUsers()
+        print("📡 [调试] 已通过控制器请求所有用户数据")
     else
-        print("❌ [错误] ShopEvents.Admin.GetAllUsers 不存在")
+        print("❌ [错误] AdminController 未初始化")
         if showNotification then
             showNotification("❌ 事件系统错误", false)
         end
@@ -396,57 +416,6 @@ function ShopAdminPanel._showUsersPanel(showNotification)
             loadingLabel.Text = string.format("📡 正在加载玩家数据...\n等待服务器响应 (%d/%d秒)", i, timeoutTime)
         end
 
-        if loadingLabel and loadingLabel.Parent then
-            print("⚠️ [用户管理] 请求超时，显示错误提示")
-            loadingLabel.Text = "⚠️ 服务器响应超时\n可能原因：数据服务离线或网络问题"
-            loadingLabel.TextColor3 = ShopUtils.COLORS.WARNING
-
-            -- 5秒后自动显示测试数据
-            spawn(function()
-                wait(5)
-                if loadingLabel and loadingLabel.Parent then
-                    loadingLabel:Destroy()
-                    debugBtn:Destroy()
-
-                    local testData = {
-                        [player.Name] = {
-                            userId = player.UserId,
-                            name = player.Name,
-                            coins = 1000,
-                            totalPurchases = 5,
-                            totalSpent = 500,
-                            totalSales = 3,
-                            totalEarned = 300,
-                            inventoryCount = 10,
-                            membership_status = "active",
-                            end_date = "2024-12-31",
-                            days_remaining = 30,
-                            daily_reward_coins = 100
-                        },
-                        ["测试用户1"] = {
-                            userId = 12345,
-                            name = "测试用户1",
-                            coins = 500,
-                            totalPurchases = 2,
-                            totalSpent = 200,
-                            totalSales = 1,
-                            totalEarned = 100,
-                            inventoryCount = 5,
-                            membership_status = "none",
-                            end_date = nil,
-                            days_remaining = 0,
-                            daily_reward_coins = 100
-                        }
-                    }
-
-                    print("🧪 [测试] 自动显示测试数据")
-                    ShopAdminPanel._displayAllPlayersData(testData, showNotification)
-                    if showNotification then
-                        showNotification("🧪 自动显示测试数据（服务器超时）", true)
-                    end
-                end
-            end)
-        end
     end)
 
     -- 监听服务器响应
@@ -456,15 +425,15 @@ function ShopAdminPanel._showUsersPanel(showNotification)
 
     print("👤 [调试] 开始监听服务器响应事件")
 
-    if not ShopEvents.Admin.GetAllUsers.OnClientEvent then
-        print("❌ [错误] ShopEvents.Admin.GetAllUsers.OnClientEvent 不存在")
+    if not AdminController.Events.AllUsersReceived then
+        print("❌ [错误] AdminController.Events.AllUsersReceived 不存在")
         if showNotification then
             showNotification("❌ 事件监听器错误", false)
         end
         return
     end
 
-    connection = ShopEvents.Admin.GetAllUsers.OnClientEvent:Connect(function(allPlayersData, errorMsg)
+    connection = AdminController.Events.AllUsersReceived:Connect(function(success, allPlayersData, errorMsg)
         eventReceived = true
         print("👤 [调试] 收到服务器响应事件！")
         print("👤 [调试] 参数1 (allPlayersData) 类型:", type(allPlayersData))
@@ -827,12 +796,13 @@ function ShopAdminPanel._displayAllPlayersData(allPlayersData, showNotification)
             local newCoins = tonumber(coinsInput.Text)
             if newCoins and newCoins >= 0 and newCoins <= 999999 then
                 -- 发送修改金币请求
-                if ShopEvents.Admin.SetUserCoins then
-                    ShopEvents.Admin.SetUserCoins:FireServer(playerName, newCoins)
+                -- 通过管理员控制器设置用户金币
+                if AdminController then
+                    AdminController.setUserCoins(playerName, newCoins)
 
                     -- 监听修改结果
                     local connection
-                    connection = ShopEvents.Admin.SetUserCoins.OnClientEvent:Connect(function(success, message)
+                    connection = AdminController.Events.UserCoinsSet:Connect(function(success, message)
                         connection:Disconnect()
 
                         if success then
@@ -965,12 +935,13 @@ function ShopAdminPanel._showRecordsPanel(showNotification)
     loadingLabel.Parent = contentArea
 
     -- 请求特定用户的历史记录
-    if ShopEvents.Admin.GetUserHistory then
-        ShopEvents.Admin.GetUserHistory:FireServer(currentViewingPlayer)
+    -- 通过管理员控制器获取用户历史记录
+    if AdminController then
+        AdminController.requestUserHistory(currentViewingPlayer)
 
         -- 监听服务器响应
         local connection
-        connection = ShopEvents.Admin.GetUserHistory.OnClientEvent:Connect(function(success, message, data)
+        connection = AdminController.Events.UserHistoryReceived:Connect(function(success, message, data)
             connection:Disconnect()
             loadingLabel:Destroy()
 
@@ -1164,7 +1135,7 @@ function ShopAdminPanel._showMembershipPanel(showNotification)
 
     -- 从服务器获取特定用户的会员状态
     local connection
-    connection = ShopEvents.Admin.GetAllUsersWithMembership.OnClientEvent:Connect(function(success, response)
+    connection = AdminController.Events.AllUsersWithMembershipReceived:Connect(function(success, response)
         connection:Disconnect()
         loadingLabel:Destroy()
 
@@ -1211,8 +1182,9 @@ function ShopAdminPanel._showMembershipPanel(showNotification)
     end)
 
     -- 发送请求到服务器
-    if ShopEvents.Admin.GetAllUsersWithMembership then
-        ShopEvents.Admin.GetAllUsersWithMembership:FireServer(1, 50, "all")
+    -- 通过管理员控制器获取所有用户会员信息
+    if AdminController then
+        AdminController.requestAllUsersWithMembership(1, 50, "all")
     else
         loadingLabel:Destroy()
         local errorLabel = Instance.new("TextLabel")
@@ -1506,18 +1478,20 @@ function ShopAdminPanel._toggleUserMembershipByName(playerName, membershipInfo)
         dailyReward = membershipInfo.dailyReward or 100
     }
 
-    if ShopEvents.Admin.ManageUserMembership then
-        ShopEvents.Admin.ManageUserMembership:FireServer(requestData)
+    -- 通过管理员控制器管理用户会员状态
+    if AdminController then
+        AdminController.manageUserMembership(requestData)
 
         local connection
-        connection = ShopEvents.Admin.ManageUserMembership.OnClientEvent:Connect(function(success, response)
+        connection = AdminController.Events.UserMembershipManaged:Connect(function(success, response)
             connection:Disconnect()
 
             if success and response and response.success then
                 print("✅", playerName, "会员状态切换成功")
                 -- 重新获取用户数据并刷新界面
-                if ShopEvents.Admin.GetUserInfo then
-                    ShopEvents.Admin.GetUserInfo:FireServer(playerName)
+                -- 通过管理员控制器获取用户信息
+                if AdminController then
+                    AdminController.requestUserInfo(playerName)
                 end
                 -- 刷新用户列表以更新所有相关数据
                 ShopAdminPanel._refreshPlayerData()
@@ -1547,11 +1521,12 @@ function ShopAdminPanel._toggleUserMembership(user)
         dailyReward = tonumber(user.daily_reward_coins) or 100
     }
 
-    if ShopEvents.Admin.ManageUserMembership then
-        ShopEvents.Admin.ManageUserMembership:FireServer(requestData)
+    -- 通过管理员控制器管理用户会员状态
+    if AdminController then
+        AdminController.manageUserMembership(requestData)
 
         local connection
-        connection = ShopEvents.Admin.ManageUserMembership.OnClientEvent:Connect(function(success, response)
+        connection = AdminController.Events.UserMembershipManaged:Connect(function(success, response)
             connection:Disconnect()
 
             if success and response and response.success then
@@ -1562,8 +1537,9 @@ function ShopAdminPanel._toggleUserMembership(user)
                 spawn(function()
                     -- 重新获取用户数据并刷新面板
                     if currentViewingPlayer then
-                        if ShopEvents.Admin.GetUserInfo then
-                            ShopEvents.Admin.GetUserInfo:FireServer(currentViewingPlayer)
+                        -- 通过管理员控制器获取用户信息
+                        if AdminController then
+                            AdminController.requestUserInfo(currentViewingPlayer)
                         end
                         -- 等待数据更新然后刷新面板
                         task.wait(0.3)
@@ -1592,11 +1568,12 @@ function ShopAdminPanel._setMembershipDays(user, days)
         dailyReward = tonumber(user.daily_reward_coins) or 100
     }
 
-    if ShopEvents.Admin.ManageUserMembership then
-        ShopEvents.Admin.ManageUserMembership:FireServer(requestData)
+    -- 通过管理员控制器管理用户会员状态
+    if AdminController then
+        AdminController.manageUserMembership(requestData)
 
         local connection
-        connection = ShopEvents.Admin.ManageUserMembership.OnClientEvent:Connect(function(success, response)
+        connection = AdminController.Events.UserMembershipManaged:Connect(function(success, response)
             connection:Disconnect()
 
             if success and response and response.success then
@@ -1608,8 +1585,9 @@ function ShopAdminPanel._setMembershipDays(user, days)
                 spawn(function()
                     -- 重新获取用户数据并刷新面板
                     if currentViewingPlayer then
-                        if ShopEvents.Admin.GetUserInfo then
-                            ShopEvents.Admin.GetUserInfo:FireServer(currentViewingPlayer)
+                        -- 通过管理员控制器获取用户信息
+                        if AdminController then
+                            AdminController.requestUserInfo(currentViewingPlayer)
                         end
                         -- 等待数据更新然后刷新面板
                         task.wait(0.3)
@@ -1638,19 +1616,21 @@ function ShopAdminPanel._setDailyReward(user, reward)
         dailyReward = reward
     }
 
-    if ShopEvents.Admin.ManageUserMembership then
-        ShopEvents.Admin.ManageUserMembership:FireServer(requestData)
+    -- 通过管理员控制器管理用户会员状态
+    if AdminController then
+        AdminController.manageUserMembership(requestData)
 
         local connection
-        connection = ShopEvents.Admin.ManageUserMembership.OnClientEvent:Connect(function(success, response)
+        connection = AdminController.Events.UserMembershipManaged:Connect(function(success, response)
             connection:Disconnect()
 
             if success and response and response.success then
                 print("✅", user.username, "每日奖励设置成功")
                 -- 重新获取用户数据并刷新面板
                 if currentViewingPlayer then
-                    if ShopEvents.Admin.GetUserInfo then
-                        ShopEvents.Admin.GetUserInfo:FireServer(currentViewingPlayer)
+                    -- 通过管理员控制器获取用户信息
+                    if AdminController then
+                        AdminController.requestUserInfo(currentViewingPlayer)
                     end
                     -- 稍等片刻让数据更新，然后刷新面板
                     task.wait(0.5)
@@ -1672,8 +1652,9 @@ function ShopAdminPanel._refreshPlayerData()
 
     if currentTab == "players" then
         -- 重新获取用户列表
-        if ShopEvents.Admin.GetAllUsers then
-            ShopEvents.Admin.GetAllUsers:FireServer()
+        -- 通过管理员控制器刷新用户列表
+        if AdminController then
+            AdminController.requestAllUsers()
         end
     elseif currentTab == "membership" then
         -- 重新获取会员数据

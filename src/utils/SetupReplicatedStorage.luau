@@ -14,7 +14,6 @@ end
 -- 验证必需的模块是否存在
 local requiredModules = {
     "Config",
-    "EnvironmentManager",
     "ShopEvents",
     "ShopData"
 }

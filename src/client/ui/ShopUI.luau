@@ -25,11 +25,10 @@ local function getSharedModule(moduleName, timeout)
 end
 
 -- 安全加载共享模块
-local Config, ShopData, ShopEvents
+local Config, ShopData
 local success, result = pcall(function()
     Config = require(getSharedModule("Config"))
     ShopData = require(getSharedModule("ShopData"))
-    ShopEvents = require(getSharedModule("ShopEvents"))
     return true
 end)
 
@@ -40,7 +39,6 @@ if not success then
     -- 创建简单的占位对象避免脚本崩溃
     Config = {UI = {SIZES = {}, ANIMATIONS = {}}, isValidAdmin = function() return false end}
     ShopData = {}
-    ShopEvents = {User = {}, Admin = {}}
 end
 
 -- 导入拆分的模块
@@ -63,11 +61,15 @@ local function getUIModule(path)
     return module
 end
 
-local ShopUtils = require(getUIModule("functions/ShopUtils"))
+local ShopUtils = require(game:GetService("StarterPlayer").StarterPlayerScripts.Client.functions:WaitForChild("ShopUtils"))
 local ShopBuy = require(getUIModule("ui/ShopBuy"))
 local ShopSell = require(getUIModule("ui/ShopSell"))
 local ShopRecords = require(getUIModule("ui/ShopRecords"))
 local ShopAdminRecords = require(getUIModule("ui/ShopAdminRecords"))
+
+-- 导入控制器（将在初始化时设置）
+local UserController = nil
+local AdminController = nil
 
 local ShopUI = {}
 ShopUI.__index = ShopUI
@@ -264,9 +266,17 @@ function ShopUI.showQuantityDialog(itemId, action, item)
     -- 确认按钮
     local confirmButton = ShopUtils.createButton("✓ 确认", ShopUtils.COLORS.SUCCESS, buttonFrame, function()
         if action == "buy" then
-            ShopEvents.User.BuyItem:FireServer(itemId, currentQuantity)
+            if UserController then
+                UserController.buyItem(itemId, currentQuantity)
+            else
+                warn("❌ [ShopUI] UserController不可用")
+            end
         else
-            ShopEvents.User.SellItem:FireServer(itemId, currentQuantity)
+            if UserController then
+                UserController.sellItem(itemId, currentQuantity)
+            else
+                warn("❌ [ShopUI] UserController不可用")
+            end
         end
 
         dialogBg:Destroy()
@@ -332,7 +342,21 @@ local function checkAdminStatusChange()
     end
 
     lastAdminCheckTime = currentTime
-    local currentAdminStatus = Config.isValidAdmin(player)
+
+    -- 使用AdminController检查权限
+    local currentAdminStatus = false
+    local success, AdminController = pcall(function()
+        return require(script.Parent.Parent.controller.AdminController)
+    end)
+
+    if success and AdminController then
+        local adminCheckSuccess, adminResult = pcall(function()
+            return AdminController.checkPermission()
+        end)
+        if adminCheckSuccess then
+            currentAdminStatus = adminResult
+        end
+    end
 
     if currentAdminStatus ~= lastAdminStatus then
         print("🔄 [调试] 管理员状态发生变化:", lastAdminStatus, "→", currentAdminStatus)
@@ -566,25 +590,18 @@ function ShopUI.createUI()
             print("🔄 [ShopUI] 标签按钮点击:", tab.name)
             currentTab = tab.name
 
-            -- 安全地调用远程事件
-            local success, error = pcall(function()
-                if ShopEvents and ShopEvents.User then
-                    if ShopEvents.User.GetPlayerData then
-                        ShopEvents.User.GetPlayerData:FireServer()
-                    end
-                    if ShopEvents.User.GetShopData then
-                        ShopEvents.User.GetShopData:FireServer()
-                    end
-                else
-                    warn("⚠️ [ShopUI] ShopEvents 未正确加载，跳过数据请求")
+            -- 使用控制器请求数据
+            if UserController then
+                UserController.requestPlayerData()
+                UserController.requestShopData()
+                if tab.name == "records" then
+                    UserController.requestTransactions()
                 end
-            end)
-
-            if not success then
-                warn("❌ [ShopUI] 远程事件调用失败:", error)
+            else
+                warn("⚠️ [ShopUI] UserController 不可用，跳过数据请求")
             end
 
-            -- 立即更新UI（即使数据请求失败）
+            -- 立即更新UI
             ShopUI.updateUI()
         end)
 
@@ -636,11 +653,14 @@ function ShopUI.openShop()
         ShopUI.createUI()
     end
 
-    -- 重新加载商品信息
-    ShopEvents.User.RefreshData:FireServer()
-
-    -- 获取玩家数据
-    ShopEvents.User.GetPlayerData:FireServer()
+    -- 使用控制器重新加载数据
+    if UserController then
+        UserController.refreshData()
+        UserController.requestPlayerData()
+        UserController.requestShopData()
+    else
+        warn("❌ [ShopUI] 打开商店时未找到UserController")
+    end
 
     -- 更新会员状态
     ShopUI.updateMembershipStatus()
@@ -761,7 +781,10 @@ function ShopUI.claimDailyRewards()
         if rewardData and rewardData.totalRewards > 0 then
             ShopUtils.showNotification("✅ " .. message .. " 获得 " .. rewardData.totalRewards .. " 金币", true, screenGui)
             -- 刷新玩家数据
-            ShopEvents.User.GetPlayerData:FireServer()
+            -- 通过控制器刷新玩家数据
+            if UserController then
+                UserController.requestPlayerData()
+            end
         else
             ShopUtils.showNotification("ℹ️ 今日奖励已领取完毕", true, screenGui)
         end
@@ -782,7 +805,7 @@ function ShopUI.disconnectEvents()
     print("🔌 [事件管理] 已断开所有事件连接")
 end
 
--- 事件连接
+-- 事件连接 - 使用控制器事件系统
 function ShopUI.connectEvents()
     -- 如果已经连接过事件，先断开旧连接
     if eventsConnected then
@@ -790,8 +813,14 @@ function ShopUI.connectEvents()
         ShopUI.disconnectEvents()
     end
 
-    -- 获取玩家数据响应
-    eventConnections.getPlayerData = ShopEvents.User.GetPlayerData.OnClientEvent:Connect(function(data)
+    -- 检查控制器是否已设置
+    if not UserController or not UserController.Events then
+        warn("❌ [ShopUI] UserController或其事件系统未初始化")
+        return
+    end
+
+    -- 获取玩家数据响应 - 通过控制器事件
+    eventConnections.getPlayerData = UserController.Events.PlayerDataChanged:Connect(function(data)
         if data then
             local oldCoins = playerData and playerData.coins or 0
             playerData = data
@@ -833,8 +862,8 @@ function ShopUI.connectEvents()
         end
     end)
 
-    -- 获取商店数据响应
-    eventConnections.getShopData = ShopEvents.User.GetShopData.OnClientEvent:Connect(function(data)
+    -- 获取商店数据响应 - 通过控制器事件
+    eventConnections.getShopData = UserController.Events.ShopDataChanged:Connect(function(data)
         shopData = data
         local itemCount = 0
         if data then
@@ -846,8 +875,8 @@ function ShopUI.connectEvents()
         ShopUI.updateUI()
     end)
 
-    -- 购买响应
-    eventConnections.buyItem = ShopEvents.User.BuyItem.OnClientEvent:Connect(function(success, message, newData)
+    -- 购买响应 - 通过控制器事件
+    eventConnections.buyItem = UserController.Events.BuyResult:Connect(function(success, message, newData)
         if success then
             playerData = newData
 
@@ -861,7 +890,10 @@ function ShopUI.connectEvents()
                 task.wait(0.2)
 
                 -- 强制刷新数据
-                ShopEvents.User.RefreshData:FireServer()
+                -- 通过控制器刷新数据
+                    if UserController then
+                        UserController.refreshData()
+                    end
 
                 -- 再次等待数据刷新
                 task.wait(0.1)
@@ -872,7 +904,10 @@ function ShopUI.connectEvents()
 
             -- 刷新商店数据
             if not isMembershipPurchase then
-                ShopEvents.User.RefreshData:FireServer()
+                -- 通过控制器刷新数据
+                    if UserController then
+                        UserController.refreshData()
+                    end
             end
             ShopUI.updateUI()
 
@@ -885,12 +920,15 @@ function ShopUI.connectEvents()
         end
     end)
 
-    -- 卖出响应
-    eventConnections.sellItem = ShopEvents.User.SellItem.OnClientEvent:Connect(function(success, message, newData)
+    -- 卖出响应 - 通过控制器事件
+    eventConnections.sellItem = UserController.Events.SellResult:Connect(function(success, message, newData)
         if success then
             playerData = newData
             -- 刷新商店数据
-            ShopEvents.User.RefreshData:FireServer()
+            -- 通过控制器刷新数据
+                    if UserController then
+                        UserController.refreshData()
+                    end
             ShopUI.updateUI()
             ShopUtils.showNotification("✅ " .. message, true, screenGui)
 
@@ -901,82 +939,86 @@ function ShopUI.connectEvents()
         end
     end)
 
-    -- 管理员功能响应
-    eventConnections.setPlayerCoins = ShopEvents.Admin.SetUserCoins.OnClientEvent:Connect(function(success, message)
-        if success then
-            ShopUtils.showNotification("✅ " .. message, true, screenGui)
-        else
-            ShopUtils.showNotification("❌ " .. message, false, screenGui)
-        end
-    end)
-
-    -- 会员状态变更通知
-    eventConnections.membershipStatusChanged = ShopEvents.User.MembershipStatusChanged.OnClientEvent:Connect(function(statusData)
-        if statusData and statusData.success then
-            print("🔄 [会员状态] 收到状态变更通知:", statusData.message)
-
-            -- 显示通知
-            if statusData.message then
-                ShopUtils.showNotification("✅ " .. statusData.message, true, screenGui)
+    -- 管理员功能响应 - 通过控制器事件
+    if AdminController and AdminController.Events then
+        eventConnections.setPlayerCoins = AdminController.Events.UserCoinsSet:Connect(function(success, message)
+            if success then
+                ShopUtils.showNotification("✅ " .. message, true, screenGui)
+            else
+                ShopUtils.showNotification("❌ " .. message, false, screenGui)
             end
+        end)
+    end
 
-            -- 立即刷新玩家数据
-            ShopEvents.User.GetPlayerData:FireServer()
+    -- 会员状态变更通知 - 通过玩家数据变更事件监听
+    -- 注意：会员状态变更会触发PlayerDataChanged事件，在上面已经处理
+
+    -- 用户历史记录响应 - 通过管理员控制器事件
+    if AdminController and AdminController.Events then
+        eventConnections.getPlayerPurchaseHistory = AdminController.Events.UserHistoryReceived:Connect(function(success, message, data)
+            print("📊 [ShopUI] GetUserHistory事件响应:", success, message, data and "有数据" or "无数据")
+
+            if not success then
+                -- 当失败时，message 包含错误信息
+                local errorMsg = message or "获取用户历史记录失败"
+                ShopUtils.showNotification("❌ " .. errorMsg, false, screenGui)
+                ShopRecords.handleAdminHistoryResponse(success, errorMsg, nil)
+            elseif data then
+                -- 当成功时，使用统一的处理函数
+                ShopRecords.handleAdminHistoryResponse(success, message, data)
+            end
+        end)
+    end
+
+    -- 数据刷新响应 - 通过控制器事件
+    eventConnections.dataRefreshed = UserController.Events.DataRefreshed:Connect(function(success, data)
+        print("🔄 [数据刷新] 收到刷新结果:", success)
+
+        if success then
+            print("🔄 [数据刷新] 数据刷新成功")
+            ShopUtils.showNotification("✅ 数据刷新成功", true, screenGui)
+
+            -- 数据会通过其他事件自动更新UI
+        else
+            print("❌ [数据刷新] 数据刷新失败")
+            ShopUtils.showNotification("❌ 数据刷新失败", false, screenGui)
         end
     end)
 
-    eventConnections.getPlayerPurchaseHistory = ShopEvents.Admin.GetUserHistory.OnClientEvent:Connect(function(success, message, data)
-        print("📊 [ShopUI] GetUserHistory事件响应:", success, message, data and "有数据" or "无数据")
+    -- 用户交易记录响应 - 通过控制器事件
+    eventConnections.getTransactions = UserController.Events.TransactionsChanged:Connect(function(newData, oldData)
+        print("📊 [交易记录] 收到交易数据变更")
 
-        if not success then
-            -- 当失败时，message 包含错误信息
-            local errorMsg = message or "获取用户历史记录失败"
-            ShopUtils.showNotification("❌ " .. errorMsg, false, screenGui)
-            ShopRecords.handleAdminHistoryResponse(success, errorMsg, nil)
-        elseif data then
-            -- 当成功时，使用统一的处理函数
-            ShopRecords.handleAdminHistoryResponse(success, message, data)
-        end
-    end)
-
-    -- 数据刷新请求
-    eventConnections.refreshData = ShopEvents.User.RefreshData.OnClientEvent:Connect(function()
-        print("🔄 [数据刷新] 收到服务端刷新请求")
-        if playerData then
-            print("🔄 [数据刷新] 当前金币:", playerData.coins)
-        end
-        -- 立即请求最新数据
-        ShopEvents.User.GetPlayerData:FireServer()
-        ShopEvents.User.GetShopData:FireServer()
-        print("🔄 [数据刷新] 已发送数据请求")
-    end)
-
-    -- 用户交易记录响应
-    eventConnections.getTransactions = ShopEvents.User.GetTransactions.OnClientEvent:Connect(function(success, errorMsg, responseData)
-        print("📊 [交易记录] 事件响应:", success, errorMsg, responseData and "有数据" or "无数据")
-
-        if success and responseData then
+        if newData then
             -- 更新 playerData 以包含交易记录
             if playerData then
-                playerData.transactionHistory = responseData.transactions
-                playerData.transactionStats = responseData.stats
+                playerData.transactionHistory = newData.transactions or newData
+                if newData.stats then
+                    playerData.transactionStats = newData.stats
+                end
 
-                print("📊 [交易记录] 已获取 " .. #responseData.transactions .. " 条交易记录")
+                local transactionCount = 0
+                if newData.transactions then
+                    transactionCount = #newData.transactions
+                elseif type(newData) == "table" then
+                    transactionCount = #newData
+                end
+
+                print("📊 [交易记录] 已获取 " .. transactionCount .. " 条交易记录")
 
                 -- 通知ShopRecords模块更新UI
-                ShopRecords.handleTransactionResponse(success, errorMsg, responseData)
+                ShopRecords.handleTransactionResponse(true, nil, newData)
 
                 -- 刷新其他UI显示
                 ShopUI.updateUI()
             end
         else
-            local error = errorMsg or "获取交易记录失败"
-            print("❌ [交易记录] 失败:", error)
+            print("❌ [交易记录] 数据为空")
 
             -- 通知ShopRecords模块显示错误
-            ShopRecords.handleTransactionResponse(success, error, responseData)
+            ShopRecords.handleTransactionResponse(false, "交易记录数据为空", nil)
 
-            ShopUtils.showNotification("❌ " .. tostring(error), false, screenGui)
+            ShopUtils.showNotification("❌ 交易记录数据为空", false, screenGui)
         end
     end)
 
@@ -998,32 +1040,27 @@ function ShopUI.connectEvents()
     print("🔗 [事件管理] 所有事件已成功连接")
 end
 
+-- 设置控制器
+function ShopUI.setControllers(userController, adminController)
+    UserController = userController
+    AdminController = adminController
+    print("✅ [ShopUI] 控制器已设置")
+end
+
 -- 初始化
 function ShopUI.init()
     ShopUI.connectEvents()
 
-    -- 获取系统配置（包括sell_rate）
-    -- 系统配置将由服务器端管理
-    print("📡 [客户端] 正在获取系统配置...")
-
-    -- 请求玩家数据
-    if ShopEvents.User.GetPlayerData then
-        ShopEvents.User.GetPlayerData:FireServer()
-        print("📡 [客户端] 正在同步玩家数据...")
-    else
-        warn("⚠️ GetPlayerData 远程事件未找到")
-    end
-
-    -- 请求商店数据
-    if ShopEvents.User.GetShopData then
-        ShopEvents.User.GetShopData:FireServer()
-        print("📡 [客户端] 正在同步商店数据...")
-    else
-        warn("⚠️ GetShopData 远程事件未找到")
-    end
-
     print("🎨 [商店UI] 商店系统已就绪")
     print("🔧 [控制] 按 E 键打开商店")
+end
+
+-- 带控制器的初始化
+function ShopUI.initWithControllers(userController, adminController)
+    ShopUI.setControllers(userController, adminController)
+    ShopUI.init()
+
+    print("✅ [ShopUI] 与控制器连接完成")
 end
 
 return ShopUI

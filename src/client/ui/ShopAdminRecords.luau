@@ -24,8 +24,22 @@ ShopAdminRecords.pendingScreenGui = nil
 function ShopAdminRecords.showAdminPanel(screenGui, showNotification)
     print("🔧 [管理员面板适配器] 调用统一管理面板")
 
-    -- 检查管理员权限
-    if not Config.isValidAdmin(player) then
+    -- 检查管理员权限 - 使用AdminController
+    local isAdmin = false
+    local success, AdminController = pcall(function()
+        return require(script.Parent.Parent.controller.AdminController)
+    end)
+
+    if success and AdminController then
+        local adminCheckSuccess, adminResult = pcall(function()
+            return AdminController.checkPermission()
+        end)
+        if adminCheckSuccess then
+            isAdmin = adminResult
+        end
+    end
+
+    if not isAdmin then
         print("❌ [管理员面板适配器] 管理员权限检查失败")
         if showNotification then
             showNotification("❌ 您没有管理员权限", false)
@@ -41,8 +55,22 @@ end
 function ShopAdminRecords.showPlayerRecords(playerName, records, screenGui)
     print("📊 [管理员记录适配器] 显示玩家记录:", playerName, "记录数量:", records and #records or 0)
 
-    -- 检查管理员权限
-    if not Config.isValidAdmin(player) then
+    -- 检查管理员权限 - 使用AdminController
+    local isAdmin = false
+    local success, AdminController = pcall(function()
+        return require(script.Parent.Parent.controller.AdminController)
+    end)
+
+    if success and AdminController then
+        local adminCheckSuccess, adminResult = pcall(function()
+            return AdminController.checkPermission()
+        end)
+        if adminCheckSuccess then
+            isAdmin = adminResult
+        end
+    end
+
+    if not isAdmin then
         print("❌ [管理员记录适配器] 权限检查失败")
         return
     end

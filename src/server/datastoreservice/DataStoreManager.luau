@@ -9,41 +9,14 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
--- 尝试从多个位置获取环境管理器
-local EnvironmentManager
-local function getEnvironmentManager()
-    -- 方法1: 从ReplicatedStorage获取
-    local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
-    if sharedModules and sharedModules:FindFirstChild("EnvironmentManager") then
-        return require(sharedModules.EnvironmentManager)
-    end
-
-    -- 方法2: 从服务器脚本服务获取
-    local ServerScriptService = game:GetService("ServerScriptService")
-    local serverFolder = ServerScriptService:FindFirstChild("Server")
-    if serverFolder then
-        local srcFolder = serverFolder.Parent
-        local utilsFolder = srcFolder:FindFirstChild("utils")
-        if utilsFolder and utilsFolder:FindFirstChild("EnvironmentManager") then
-            return require(utilsFolder.EnvironmentManager)
-        end
-    end
-
-    -- 方法3: 创建默认环境管理器
-    return {
-        isStudio = function() return game:GetService("RunService"):IsStudio() end,
-        getCurrentEnvironment = function() return game:GetService("RunService"):IsStudio() and "Studio" or "Production" end,
-        getDataStoreConfig = function()
-            return {
-                enabled = not game:GetService("RunService"):IsStudio(),
-                mockData = game:GetService("RunService"):IsStudio(),
-                retryAttempts = 3
-            }
-        end
-    }
-end
-
-EnvironmentManager = getEnvironmentManager()
+-- 环境检测
+local isStudio = RunService:IsStudio()
+local currentEnvironment = isStudio and "Studio" or "Production"
+local dataStoreConfig = {
+    enabled = not isStudio,
+    mockData = isStudio,
+    retryAttempts = 3
+}
 
 local DataStoreManager = {}
 
@@ -51,9 +24,6 @@ local DataStoreManager = {}
 -- DataStore 配置
 -- ==============================================
 
--- 环境检测和配置
-local isStudio = EnvironmentManager.isStudio()
-local dataStoreConfig = EnvironmentManager.getDataStoreConfig()
 
 -- DataStore 实例
 local dataStores = {}
@@ -73,7 +43,7 @@ local DATASTORE_NAMES = {
 
 -- 初始化 DataStores
 local function initializeDataStores()
-    local currentEnv = EnvironmentManager.getCurrentEnvironment()
+    local currentEnv = currentEnvironment
 
     if dataStoreConfig.mockData or not dataStoreConfig.enabled then
         print("⚠️ " .. currentEnv .. "环境 - 使用模拟DataStore")

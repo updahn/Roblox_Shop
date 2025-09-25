@@ -1,20 +1,16 @@
--- 无人机系统客户端管理器
--- 处理无人机UI、控制和视觉效果
+-- 无人机UI管理器
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 
-local DroneManager = {}
+local DroneUI = {}
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 -- 等待模块
 local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
 local Config = require(SharedModules:WaitForChild("Config"))
-local Events = require(SharedModules:WaitForChild("ShopEvents"))
 
 -- 使用统一的配置
 local DroneConfig = Config.DRONE_CONFIG
@@ -28,19 +24,15 @@ local modeButton
 local statusLabel
 local timerLabel
 
--- 无人机状态
-local droneStatus = {
-    isActive = false,
-    mode = DroneConfig.MODES.FOLLOW,
-    timeRemaining = 0
-}
+-- DroneController引用（将在初始化时设置）
+local DroneController = nil
 
 -- ==============================================
 -- 内部工具函数
 -- ==============================================
 
 local function log(message, ...)
-    Config.log("INFO", "[客户端] " .. message, {...})
+    Config.log("INFO", "[DroneUI] " .. message, {...})
 end
 
 -- 创建按钮
@@ -108,11 +100,19 @@ local function createLabel(name, text, position, size)
 end
 
 -- ==============================================
--- UI创建函数
+-- UI状态更新函数
 -- ==============================================
 
 -- 更新按钮状态
-local function updateButtonStates()
+function DroneUI.updateButtonStates(droneStatus)
+    if not screenGui or not droneStatus then return end
+
+    -- 检查UI元素是否存在
+    if not spawnButton or not recallButton or not modeButton or not statusLabel or not timerLabel then
+        warn("❌ [DroneUI] UI元素未完全创建，跳过状态更新")
+        return
+    end
+
     if droneStatus.isActive then
         spawnButton.BackgroundColor3 = DroneConfig.UI.COLORS.DISABLED
         spawnButton.Text = "无人机活跃"
@@ -128,6 +128,9 @@ local function updateButtonStates()
         end
 
         statusLabel.Text = "状态: " .. (droneStatus.mode == DroneConfig.MODES.FOLLOW and "跟随模式" or "驻守模式")
+
+        -- 更新计时器
+        DroneUI.updateTimer(droneStatus.timeRemaining)
     else
         spawnButton.BackgroundColor3 = DroneConfig.UI.COLORS.SPAWN_BUTTON
         spawnButton.Text = DroneConfig.UI.TEXT.SPAWN
@@ -143,8 +146,31 @@ local function updateButtonStates()
     end
 end
 
+-- 更新计时器显示
+function DroneUI.updateTimer(timeRemaining)
+    if not timerLabel then
+        warn("❌ [DroneUI] timerLabel未创建，跳过计时器更新")
+        return
+    end
+
+    if timeRemaining and timeRemaining > 0 then
+        timerLabel.Text = string.format("剩余时间: %.1f秒", timeRemaining)
+    else
+        timerLabel.Text = "剩余时间: --"
+    end
+end
+
+-- 更新状态显示（由DroneController调用）
+function DroneUI.updateStatus(status)
+    DroneUI.updateButtonStates(status)
+end
+
+-- ==============================================
+-- UI创建函数
+-- ==============================================
+
 local function createDroneUI()
-    -- 创建ScreenGui（但设置为隐藏状态）
+    -- 创建ScreenGui
     screenGui = Instance.new("ScreenGui")
     screenGui.Name = "DroneUI"
     screenGui.ResetOnSpawn = false
@@ -161,7 +187,7 @@ local function createDroneUI()
     droneFrame.BorderSizePixel = 0
     droneFrame.Parent = screenGui
 
-    -- 添加圆角和阴影
+    -- 添加圆角
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 12)
     corner.Parent = droneFrame
@@ -202,168 +228,139 @@ local function createDroneUI()
     timerLabel.TextXAlignment = Enum.TextXAlignment.Left
     timerLabel.Parent = droneFrame
 
-    -- 初始化按钮状态
-    updateButtonStates()
-end
-
--- 更新计时器
-local function updateTimer()
-    if droneStatus.isActive and droneStatus.timeRemaining > 0 then
-        timerLabel.Text = string.format("剩余时间: %.1f秒", droneStatus.timeRemaining)
-    else
-        timerLabel.Text = "剩余时间: --"
-    end
+    log("无人机UI界面创建完成")
 end
 
 -- ==============================================
 -- 事件处理函数
 -- ==============================================
 
-local function handleSpawnButtonClick()
-    if not droneStatus.isActive then
-        log("请求召唤无人机")
-        Events.Drone.SpawnDrone:FireServer()
+-- 连接按钮事件到控制器
+local function connectButtonEvents()
+    if not DroneController then
+        warn("❌ [DroneUI] DroneController未设置")
+        return
+    end
+
+    -- 检查按钮是否存在
+    if not spawnButton then
+        warn("❌ [DroneUI] spawnButton未创建")
+        return
+    end
+    if not recallButton then
+        warn("❌ [DroneUI] recallButton未创建")
+        return
+    end
+    if not modeButton then
+        warn("❌ [DroneUI] modeButton未创建")
+        return
+    end
+
+    spawnButton.MouseButton1Click:Connect(function()
+        DroneController.handleDroneAction("spawn")
+    end)
+
+    recallButton.MouseButton1Click:Connect(function()
+        DroneController.handleDroneAction("recall")
+    end)
+
+    modeButton.MouseButton1Click:Connect(function()
+        DroneController.handleDroneAction("switch_mode")
+    end)
+
+    log("按钮事件已连接到控制器")
+end
+
+-- ==============================================
+-- 公共接口
+-- ==============================================
+
+-- 设置DroneController引用
+function DroneUI.setDroneController(controller)
+    DroneController = controller
+    log("DroneController引用已设置")
+end
+
+-- 设置控制器（为了与其他UI模块保持一致的接口）
+function DroneUI.setControllers(droneController)
+    DroneUI.setDroneController(droneController)
+    log("控制器已设置")
+end
+
+-- 显示/隐藏UI
+function DroneUI.setVisible(visible)
+    if screenGui then
+        screenGui.Enabled = visible
+        log("UI可见性设置为:", visible)
     end
 end
 
-local function handleRecallButtonClick()
-    if droneStatus.isActive then
-        log("请求收回无人机")
-        Events.Drone.RecallDrone:FireServer()
-    end
-end
-
-local function handleModeButtonClick()
-    if droneStatus.isActive then
-        local newMode = droneStatus.mode == DroneConfig.MODES.FOLLOW and DroneConfig.MODES.GUARD or DroneConfig.MODES.FOLLOW
-        log("请求切换无人机模式到:", newMode)
-        Events.Drone.SwitchDroneMode:FireServer(newMode)
-    end
-end
-
--- 服务端事件处理
-local function handleDroneSpawned(success)
-    if success then
-        droneStatus.isActive = true
-        droneStatus.mode = DroneConfig.MODES.FOLLOW
-        droneStatus.timeRemaining = DroneConfig.LIFETIME
-
-        updateButtonStates()
-        log("无人机已召唤")
-    else
-        log("无人机召唤失败")
-    end
-end
-
-local function handleDroneRecalled(success)
-    if success then
-        droneStatus.isActive = false
-        droneStatus.timeRemaining = 0
-
-        updateButtonStates()
-        log("无人机已收回")
-    end
-end
-
-local function handleDroneModeChanged(newMode, oldMode)
-    droneStatus.mode = newMode
-    updateButtonStates()
-    log("无人机模式已从", oldMode, "切换到", newMode)
-end
-
-local function handleDroneDestroyed(reason)
-    droneStatus.isActive = false
-    droneStatus.timeRemaining = 0
-
-    updateButtonStates()
-    log("无人机已销毁，原因:", reason)
-
-    -- 可以在这里显示通知
-end
-
-local function handleDroneAttack(targetName)
-    log("无人机攻击了目标:", targetName)
-    -- 可以在这里添加攻击指示器或音效
+-- 获取UI可见状态
+function DroneUI.isVisible()
+    return screenGui and screenGui.Enabled or false
 end
 
 -- ==============================================
 -- 初始化函数
 -- ==============================================
 
-function DroneManager.init()
+function DroneUI.init()
+    log("开始初始化无人机UI...")
+
     -- 创建UI
     createDroneUI()
 
+    -- 连接按钮事件（如果控制器已设置）
+    if DroneController then
+        connectButtonEvents()
+    end
+
+    log("无人机UI初始化完成")
+end
+
+-- 设置控制器并连接事件（延迟初始化）
+function DroneUI.initWithController(controller)
+    log("开始初始化无人机UI（带控制器）...")
+
+    -- 创建UI（如果还没创建）
+    if not screenGui then
+        createDroneUI()
+    end
+
+    -- 设置控制器
+    DroneUI.setDroneController(controller)
+
     -- 连接按钮事件
-    spawnButton.MouseButton1Click:Connect(handleSpawnButtonClick)
-    recallButton.MouseButton1Click:Connect(handleRecallButtonClick)
-    modeButton.MouseButton1Click:Connect(handleModeButtonClick)
+    connectButtonEvents()
 
-    -- 连接服务端事件
-    Events.Drone.DroneSpawned.OnClientEvent:Connect(handleDroneSpawned)
-    Events.Drone.DroneRecalled.OnClientEvent:Connect(handleDroneRecalled)
-    Events.Drone.DroneModeChanged.OnClientEvent:Connect(handleDroneModeChanged)
-    Events.Drone.DroneDestroyed.OnClientEvent:Connect(handleDroneDestroyed)
-    Events.Drone.DroneAttack.OnClientEvent:Connect(handleDroneAttack)
+    -- 获取初始状态并更新UI
+    local initialStatus = controller.getDroneStatus()
+    DroneUI.updateStatus(initialStatus)
 
-    -- 启动计时器更新循环
-    spawn(function()
-        while true do
-            if droneStatus.isActive and droneStatus.timeRemaining > 0 then
-                droneStatus.timeRemaining = droneStatus.timeRemaining - 0.1
-                updateTimer()
-
-                if droneStatus.timeRemaining <= 0 then
-                    -- 时间到，重置状态
-                    droneStatus.isActive = false
-                    updateButtonStates()
-                end
-            end
-            wait(0.1)
-        end
-    end)
-
-    -- 初始化无人机管理器（已禁用）
-function DroneManager.initialize()
-    log("无人机管理器已禁用，不创建UI界面")
-    -- 完全禁用无人机功能以避免界面混乱
-    return
+    log("无人机UI与控制器连接完成")
 end
 
-log("无人机管理器初始化函数已禁用")
-end
-
-function DroneManager.cleanup()
+function DroneUI.cleanup()
     if screenGui then
         screenGui:Destroy()
         screenGui = nil
     end
 
-    log("无人机管理器已清理")
+    -- 重置所有UI元素引用
+    droneFrame = nil
+    spawnButton = nil
+    recallButton = nil
+    modeButton = nil
+    statusLabel = nil
+    timerLabel = nil
+
+    log("无人机UI已清理")
 end
 
--- 添加键盘快捷键支持
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+-- 初始化无人机管理器（禁用原始的）
+function DroneUI.initialize()
+    log("无人机管理器已禁用，使用新的UI架构")
+    return
+end
 
-    if input.KeyCode == Enum.KeyCode.B then
-        -- B键召唤无人机
-        if not droneStatus.isActive then
-            handleSpawnButtonClick()
-        end
-    elseif input.KeyCode == Enum.KeyCode.N then
-        -- N键收回无人机
-        if droneStatus.isActive then
-            handleRecallButtonClick()
-        end
-    elseif input.KeyCode == Enum.KeyCode.M then
-        -- M键切换模式
-        if droneStatus.isActive then
-            handleModeButtonClick()
-        end
-    end
-end)
-
-log("无人机客户端管理器已加载")
-
-return DroneManager
+return DroneUI

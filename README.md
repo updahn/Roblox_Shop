@@ -2,131 +2,152 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Roblox Studio](https://img.shields.io/badge/Roblox%20Studio-Latest-blue)](https://www.roblox.com/create)
+[![Version](https://img.shields.io/badge/Version-v3.0-green.svg)](https://github.com/your-repo/releases)
 
-一个功能完整的现代化 Roblox 商店系统，采用纯 DataStore 架构，无需外部服务器，提供完整的电商功能、管理工具和无人机战斗系统。
+一个功能完整的现代化 Roblox 商店系统，采用纯 DataStore 架构，无需外部服务器，提供完整的电商功能、管理工具、无人机战斗系统和靶子训练场。
 
 ## 🌟 核心功能
 
-- 🛒 **智能商店系统** - 28 种商品、多分类管理、实时库存
-- 💰 **金币经济体系** - 实时余额、交易税费、会员特权
-- 👑 **管理员系统** - 用户管理、数据统计、系统配置
-- 🤖 **无人机战斗** - 智能跟随、自动攻击、模式切换
-- 🎮 **游戏化体验** - 新手教程、互动界面
+- 🛒 **智能商店系统** - 28 种商品、多分类管理、实时库存同步
+- 💰 **金币经济体系** - 实时余额、交易税费、会员特权系统
+- 👑 **管理员系统** - 用户管理、数据统计、权限控制
+- 🤖 **无人机战斗系统** - 智能 AI、自动攻击、多模式切换
+- 🎯 **靶子训练场** - 动态靶子、血量系统、自动重生
+- 🎮 **游戏化体验** - 新手教程、实时特效、互动界面
+- 🔄 **现代化架构** - MVC 模式、事件驱动、模块化设计
 
-## 📂 项目架构 (新版本)
+## 📂 项目架构 (v3.0 现代化架构)
 
-### 新架构设计原则
+### MVC 架构设计原则
 
-项目采用清晰的分层架构，严格分离服务端和客户端职责：
+项目采用现代化的 MVC(Model-View-Controller)架构，严格分离数据、视图和控制逻辑：
 
-#### 服务端架构
+#### 🖥️ 服务端架构 (Model 层)
 
-- **DataStoreService** - 顶级数据服务，负责玩家数据加载和持久化
-- **Services** - 功能服务层，提供业务逻辑和数据处理
-- **Functions/Modules** - 功能模块，依赖 Service 的辅助功能
+- **DataStoreService** - 数据持久化层，负责玩家数据的存储和加载
+- **Services** - 业务逻辑层，提供核心功能服务
+  - `UserService` - 用户认证和基础功能
+  - `AdminService` - 管理员权限和功能
+  - `DroneService` - 无人机系统逻辑
+  - `TargetService` - 靶子系统管理
+  - `CacheService` - 缓存和性能优化
+- **Functions** - 系统启动和初始化模块
 
-#### 客户端架构
+#### 📱 客户端架构 (View + Controller 层)
 
-- **Remote Services** - 封装服务端通信逻辑，只管与服务端的数据交换
-- **Controllers** - 客户端本地服务，管理 UI 状态和本地行为
-- **UI Scripts** - 纯 UI 展示逻辑，与业务逻辑解耦
+- **Controllers** - 控制器层，管理业务逻辑和状态
+  - `UserController` - 用户数据和交易控制
+  - `AdminController` - 管理员功能控制
+  - `DroneController` - 无人机状态管理
+  - `TargetController` - 靶子系统控制
+- **UI Scripts** - 视图层，纯 UI 展示和交互
+  - `ShopUI` - 主商店界面
+  - `DroneUI` - 无人机控制面板
+  - `TargetUI` - 靶子可视化界面
+  - `TutorialUI` - 新手教程系统
 - **Functions** - 客户端工具和辅助功能
 
-#### 通用模块
+#### 🔄 共享模块
 
-- **Common** - 基础通用代码，可被服务端和客户端继承
-- **Utils** - 工具模块，提供通用功能
-- **Shared** - 第三方模块和跨端共享代码
-- **Config** - 配置文件
-- **Constant** - 常量定义
+- **Config** - 统一配置管理，支持热更新
+- **Events** - 事件系统，支持客户端-服务端通信
+- **Utils** - 通用工具库和辅助函数
+- **Common** - 跨端共享的基础组件
 
-### 文件结构
+### 📁 项目文件结构
 
 ```
 src/
-├── server/                        # 服务端代码
-│   ├── datastoreservice/          # 顶级数据服务
+├── 🖥️ server/                     # 服务端代码 (Model层)
+│   ├── datastoreservice/          # 数据持久化层
 │   │   ├── init.server.luau       # DataStore服务入口
 │   │   ├── DataStoreManager.luau  # 数据存储管理器
 │   │   ├── UserDataService.luau   # 用户数据服务
 │   │   └── AdminDataService.luau  # 管理员数据服务
-│   ├── services/                  # 业务服务层
-│   │   ├── AdminService.luau      # 管理员服务
-│   │   ├── CacheService.luau      # 缓存服务
-│   │   ├── DataService.luau       # 数据服务接口
-│   │   ├── DroneService.luau      # 无人机服务
-│   │   └── UserService.luau       # 用户服务
-│   ├── functions/                 # 功能模块
+│   ├── services/                  # 业务逻辑层
+│   │   ├── UserService.luau       # 用户认证和基础功能
+│   │   ├── AdminService.luau      # 管理员权限和功能
+│   │   ├── DroneService.luau      # 🤖 无人机系统逻辑
+│   │   ├── TargetService.luau     # 🎯 靶子系统管理
+│   │   ├── CacheService.luau      # 缓存和性能优化
+│   │   └── DataService.luau       # 数据服务接口
+│   ├── functions/                 # 系统功能模块
+│   │   ├── Main.luau              # 主逻辑入口
 │   │   ├── Bootstrap.luau         # 系统启动管理器
-│   │   ├── DataManager.luau       # 数据管理器
-│   │   └── Main.luau              # 主逻辑
+│   │   └── DataManager.luau       # 数据管理器
 │   └── init.server.luau           # 服务端入口脚本
-├── client/                        # 客户端代码
-│   ├── remote/                    # 远程服务（与服务端通信）
-│   │   ├── UserRemoteService.luau # 用户远程服务
-│   │   ├── AdminRemoteService.luau# 管理员远程服务
-│   │   └── ShopClient.luau        # 商店客户端接口
-│   ├── controller/                # 本地控制器
-│   │   ├── DataController.luau    # 数据状态管理
-│   │   ├── UIController.luau      # UI状态管理
-│   │   └── ClientServiceCoordinator.luau # 服务协调器
-│   ├── ui/                        # UI脚本
+├── 📱 client/                     # 客户端代码 (View + Controller层)
+│   ├── controller/                # 🎮 控制器层 - 业务逻辑控制
+│   │   ├── UserController.luau    # 用户数据和交易控制
+│   │   ├── AdminController.luau   # 管理员功能控制
+│   │   ├── DroneController.luau   # 🤖 无人机状态管理
+│   │   └── TargetController.luau  # 🎯 靶子系统控制
+│   ├── ui/                        # 🎨 视图层 - UI展示和交互
 │   │   ├── ShopUI.luau            # 主商店界面
-│   │   ├── TutorialUI.luau        # 新手教程
-│   │   ├── DroneManager.luau      # 无人机管理器
-│   │   ├── ShopAdminPanel.luau    # 管理员面板
-│   │   ├── ShopAdminMembership.luau # 会员管理
-│   │   ├── ShopAdminRecords.luau  # 管理员记录
+│   │   ├── DroneUI.luau           # 🤖 无人机控制面板
+│   │   ├── TargetUI.luau          # 🎯 靶子可视化界面
+│   │   ├── TutorialUI.luau        # 新手教程系统
+│   │   ├── ShopAdminPanel.luau    # 👑 管理员面板
+│   │   ├── ShopAdminMembership.luau # 会员管理界面
+│   │   ├── ShopAdminRecords.luau  # 管理员记录界面
 │   │   ├── ShopBuy.luau           # 购买界面
-│   │   ├── ShopRecords.luau       # 记录界面
-│   │   └── ShopSell.luau          # 出售界面
-│   ├── functions/                 # 客户端功能模块
+│   │   ├── ShopSell.luau          # 出售界面
+│   │   └── ShopRecords.luau       # 交易记录界面
+│   ├── functions/                 # 客户端工具模块
 │   │   └── ShopUtils.luau         # 商店工具库
 │   └── init.client.luau           # 客户端入口脚本
-├── common/                        # 通用基础代码
+├── 🔄 shared/                     # 共享模块
+│   ├── Events.luau                # 事件定义和通信
+│   └── ShopData.luau              # 商店数据结构
+├── ⚙️ config/                     # 配置管理
+│   └── Config.luau                # 统一配置文件
+├── 🛠️ utils/                      # 工具模块
+│   ├── CacheManager.luau          # 缓存管理器
+│   ├── ItemsInitializer.luau      # 物品初始化器
+│   └── SetupReplicatedStorage.luau # 共享存储设置
+├── 🏗️ common/                     # 通用基础组件
 │   ├── BaseService.luau           # 基础服务类
 │   └── EventManager.luau          # 事件管理器
-├── utils/                         # 工具模块
-│   ├── CacheManager.luau          # 缓存管理器
-│   ├── EnvironmentManager.luau    # 环境管理器
-│   ├── ItemsInitializer.luau      # 物品初始化器
-│   ├── SetupReplicatedStorage.luau # 共享存储设置
-│   ├── TargetService.luau         # 目标服务
-│   └── DataSerializer.luau        # 数据序列化工具
-├── shared/                        # 第三方和跨端模块
-│   └── Events.luau                # 事件定义
-├── config/                        # 配置文件
-│   └── Config.luau                # 主配置文件
-├── constant/                      # 常量定义
-│   └── Types.luau                 # 类型定义
-└── assets/                        # 资源文件
+└── 📦 assets/                     # 资源文件
 ```
 
-### 架构特性
+### 🏗️ 架构特性
 
-#### 🔄 数据流控制
+#### 🔄 MVC 数据流控制
 
-- **单向数据流** - 客户端通过 Remote Service 请求数据
-- **状态管理** - Controller 层管理本地状态，UI 层只负责展示
-- **事件驱动** - 使用 BindableEvent 实现组件间通信
+- **Model 层(服务端)** - 数据持久化和业务逻辑处理
+- **View 层(客户端 UI)** - 纯 UI 展示，无业务逻辑
+- **Controller 层(客户端)** - 状态管理和用户交互处理
+- **事件驱动通信** - 使用 RemoteEvent 和 BindableEvent 实现跨层通信
 
-#### 🛡️ 循环引用防护
+#### 🎯 新增系统特性
 
-- **数据序列化** - 自动检测和处理循环引用
-- **模块解耦** - 严格的依赖方向，避免循环依赖
-- **接口抽象** - 通过事件和接口解耦模块
+- **🤖 无人机战斗系统**
+
+  - 智能 AI 寻敌算法，支持玩家、NPC、靶子三级目标优先级
+  - 跟随/驻守双模式切换，适应不同战斗场景
+  - 实时 3D 特效系统，包含激光攻击、爆炸效果
+  - 自动高度控制，根据目标类型调整攻击位置
+
+- **🎯 靶子训练系统**
+  - 动态生成算法，自动分布在合理位置
+  - 血量系统，支持伤害计算和可视化血条
+  - 自动重生机制，保持训练场活跃度
+  - 实时 UI 同步，客户端状态与服务端完全同步
+
+#### 🛡️ 安全和稳定性
+
+- **权限验证** - 多层权限检查，配置文件+数据库双重验证
+- **数据安全** - 原子操作和事务处理，确保数据一致性
+- **错误恢复** - 完善的异常处理和自动恢复机制
+- **模块解耦** - 严格的依赖关系，避免循环引用
 
 #### ⚡ 性能优化
 
-- **缓存策略** - 多层缓存减少网络请求
-- **按需加载** - 模块化设计支持按需初始化
-- **事件池化** - 统一的事件管理避免内存泄漏
-
-#### 🧪 可测试性
-
-- **依赖注入** - 服务间通过接口通信
-- **模块隔离** - 每个模块职责单一，便于单元测试
-- **环境分离** - Studio 和生产环境自动切换
+- **智能缓存** - 多层缓存策略，显著减少 DataStore 调用
+- **事件池化** - 统一的事件管理，避免内存泄漏
+- **按需加载** - 模块化设计，支持延迟初始化
+- **状态同步** - 高效的客户端-服务端状态同步机制
 
 ### 技术架构
 
@@ -178,15 +199,31 @@ ADMIN_CONFIG = {
 }
 ```
 
-#### 4. 配置无人机系统
+#### 4. 配置系统参数
 
 ```lua
--- 🤖 无人机模型配置
+-- 🤖 无人机系统配置
 DRONE_CONFIG = {
-    ASSET_ID = "rbxassetid://你的无人机模型ID",
-    LIFETIME = 10,           -- 生存时间(秒)
+    LIFETIME = 10,           -- 无人机生存时间(秒)
     ATTACK_RANGE = 50,       -- 攻击范围
     ATTACK_DAMAGE = 30,      -- 攻击伤害
+    FOLLOW_DISTANCE = 8,     -- 跟随距离
+    MODES = {
+        FOLLOW = "follow",   -- 跟随模式
+        GUARD = "guard"      -- 驻守模式
+    }
+}
+
+-- 🎯 靶子系统配置
+TARGETS = {
+    COUNT = 3,               -- 靶子数量
+    MAX_HEALTH = 100,        -- 靶子血量
+    RESPAWN_TIME = 5,        -- 重生时间(秒)
+    SPAWN_AREA = {
+        MIN_RADIUS = 30,     -- 最小生成半径
+        MAX_RADIUS = 100,    -- 最大生成半径
+        CENTER = Vector3.new(0, 0, 0)  -- 生成中心
+    }
 }
 ```
 
@@ -202,23 +239,49 @@ DRONE_CONFIG = {
 
 ## 🎮 操作指南
 
-### 用户操作
+### 🎯 基础操作
 
-| 按键  | 功能           | 说明              |
-| ----- | -------------- | ----------------- |
-| **E** | 打开商店       | 查看和购买商品    |
-| **H** | 显示教程       | 新手引导和帮助    |
-| **B** | 召唤无人机     | 召唤 AI 战斗助手  |
-| **N** | 收回无人机     | 立即收回无人机    |
-| **M** | 切换无人机模式 | 跟随/驻守模式切换 |
+| 按键  | 功能     | 说明                 |
+| ----- | -------- | -------------------- |
+| **E** | 打开商店 | 查看商品、购买、出售 |
+| **H** | 显示教程 | 新手引导和功能说明   |
 
-### 管理员操作
+### 🤖 无人机系统操作
 
-管理员功能通过商店界面内的管理按钮访问，包括：
+| 按键  | 功能       | 说明              |
+| ----- | ---------- | ----------------- |
+| **B** | 召唤无人机 | 召唤 AI 战斗助手  |
+| **N** | 收回无人机 | 立即收回无人机    |
+| **M** | 切换模式   | 跟随/驻守模式切换 |
 
-- 用户管理和系统配置
-- 会员状态和特权设置
-- 交易记录和数据统计
+#### 无人机模式说明
+
+- **🏃 跟随模式** - 无人机跟随玩家移动，自动攻击范围内敌人
+- **🏠 驻守模式** - 无人机停留在召唤位置，守护该区域
+
+#### 攻击优先级
+
+1. **👤 其他玩家** (最高优先级)
+2. **🤖 NPC 角色** (中等优先级)
+3. **🎯 训练靶子** (最低优先级)
+
+### 🎯 靶子训练系统
+
+训练靶子会自动生成在地图周围，具有以下特性：
+
+- **📊 血量系统** - 每个靶子 100 血量，带可视化血条
+- **🔄 自动重生** - 被摧毁后 5 秒自动重生
+- **📍 动态位置** - 随机分布在合理的训练位置
+- **🎨 实时特效** - 攻击和摧毁时显示特效
+
+### 👑 管理员功能
+
+管理员可通过商店界面访问高级功能：
+
+- **👤 用户管理** - 查看玩家信息、设置管理员权限
+- **📊 数据统计** - 查看交易记录、系统使用情况
+- **👥 会员管理** - 管理会员状态和特权设置
+- **⚙️ 系统配置** - 调整系统参数和功能开关
 
 ## 📦 商品系统
 
@@ -459,7 +522,45 @@ MIT License
 
 ---
 
-## 🔄 最新更新
+## 🔄 版本更新历史
+
+### v3.0.0 - 现代化架构重构 + 战斗系统 (2024-12-25)
+
+#### 🚀 重大新功能
+
+- ✨ **🤖 完整无人机战斗系统**
+
+  - 智能 AI 寻敌算法，支持三级目标优先级
+  - 跟随/驻守双模式，适应不同战术需求
+  - 实时 3D 特效系统，激光攻击和爆炸效果
+  - 自动高度控制，精确攻击定位
+
+- ✨ **🎯 靶子训练系统**
+  - 动态生成算法，智能分布训练靶子
+  - 完整血量系统，可视化血条显示
+  - 自动重生机制，持续训练体验
+  - 实时 UI 同步，完美的客户端-服务端状态同步
+
+#### 🏗️ 架构升级
+
+- ✅ **MVC 架构重构** - 完整的 Model-View-Controller 分层设计
+- ✅ **Controller 层引入** - 新增 4 个专业控制器管理不同系统
+- ✅ **事件驱动通信** - 统一的事件系统，支持跨层通信
+- ✅ **模块化设计** - 高内聚低耦合，便于维护和扩展
+
+#### 🔧 技术改进
+
+- 🎯 **TargetController** - 专业的靶子系统状态管理
+- 🤖 **DroneController** - 无人机系统的完整控制逻辑
+- 👤 **UserController** - 用户数据和交易的统一管理
+- 👑 **AdminController** - 管理员功能的集中控制
+
+#### 🐛 问题修复
+
+- ✅ **修复靶子删除逻辑** - 解决靶子无法正确摧毁的问题
+- ✅ **优化无人机路径查找** - 修复 TargetService 引用错误
+- ✅ **增强 UI 同步机制** - 确保客户端 UI 与服务端状态完全同步
+- ✅ **改进事件处理** - 更稳定的跨系统事件通信
 
 ### v2.1.0 - 模块引用重构 (2024-12-24)
 
@@ -469,22 +570,6 @@ MIT License
 - ✅ **智能环境检测** - Studio 和生产环境自动适配
 - ✅ **增强错误处理** - 详细的模块加载错误提示
 - ✅ **改进 SharedModules 设置** - 更稳定的共享模块初始化
-
-#### 🔧 技术升级
-
-- 新增模块加载回退机制，支持多位置查找
-- 优化 DataStore 初始化流程，提升启动可靠性
-- 改进缓存系统集成，减少模块依赖问题
-- 增强客户端服务协调器的模块管理
-
-#### 🐛 修复问题
-
-- ✅ **修复 `utils is not a valid member of Script` 错误** - 完全重写模块引用系统
-- ✅ **解决 `SharedModules` 无限等待问题** - 添加超时处理和错误回退
-- ✅ **修复 `Attempted to call require with invalid argument(s)` 错误** - 服务端模块加载优化
-- ✅ **解决按钮无响应问题** - 增强客户端事件处理和错误容错
-- ✅ **修复服务端模块引用循环依赖** - 采用绝对路径引用系统
-- ✅ **优化客户端 UI 模块加载逻辑** - 支持部分模块加载失败的降级处理
 
 ## 🚀 立即开始
 

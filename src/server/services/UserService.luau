@@ -193,11 +193,14 @@ local function handleGetPlayerData(player: Player)
     local session = getPlayerSession(player)
     if not session or not session.authenticated then
         -- 尝试重新认证
+        print("🔄 [UserService] 尝试重新认证用户:", player.Name)
         if not UserService.authenticatePlayer(player) then
-            Events.User.GetPlayerData:FireClient(player, nil)
+            warn("❌ [UserService] 用户认证失败:", player.Name)
+            Events.User.GetPlayerData:FireClient(player, false, "用户认证失败")
             return
         end
         session = getPlayerSession(player)
+        print("✅ [UserService] 用户重新认证成功:", player.Name)
     end
 
     -- 获取最新的用户数据
@@ -254,17 +257,24 @@ local function handleGetPlayerData(player: Player)
         end
 
         session.userData = userData
-        Events.User.GetPlayerData:FireClient(player, playerData)
+        Events.User.GetPlayerData:FireClient(player, true, playerData)
     else
-        Events.User.GetPlayerData:FireClient(player, nil)
+        warn("❌ [UserService] 获取用户数据失败:", player.Name)
+        Events.User.GetPlayerData:FireClient(player, false, "获取用户数据失败")
     end
 end
 
 local function handleGetShopData(player: Player)
     local session = getPlayerSession(player)
     if not session or not session.authenticated then
-        Events.User.GetShopData:FireClient(player, {})
-        return
+        print("🔄 [UserService] 尝试重新认证用户以获取商店数据:", player.Name)
+        if not UserService.authenticatePlayer(player) then
+            warn("❌ [UserService] 用户认证失败，无法获取商店数据:", player.Name)
+            Events.User.GetShopData:FireClient(player, false, "用户认证失败")
+            return
+        end
+        session = getPlayerSession(player)
+        print("✅ [UserService] 用户重新认证成功，继续获取商店数据:", player.Name)
     end
 
     local shopItems = DataService.getShopItems()
@@ -286,9 +296,10 @@ local function handleGetShopData(player: Player)
             }
         end
 
-        Events.User.GetShopData:FireClient(player, shopData)
+        Events.User.GetShopData:FireClient(player, true, shopData)
     else
-        Events.User.GetShopData:FireClient(player, {})
+        warn("❌ [UserService] 获取商店数据失败:", player.Name)
+        Events.User.GetShopData:FireClient(player, false, "获取商店数据失败")
     end
 end
 

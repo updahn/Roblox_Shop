@@ -19,8 +19,22 @@ local ShopMembership = {}
 function ShopMembership.showMembershipUI(screenGui)
     print("👥 [会员管理适配器] 调用统一管理面板")
 
-    -- 检查管理员权限
-    if not Config.isValidAdmin(player) then
+    -- 检查管理员权限 - 使用AdminController
+    local isAdmin = false
+    local success, AdminController = pcall(function()
+        return require(script.Parent.Parent.controller.AdminController)
+    end)
+
+    if success and AdminController then
+        local adminCheckSuccess, adminResult = pcall(function()
+            return AdminController.checkPermission()
+        end)
+        if adminCheckSuccess then
+            isAdmin = adminResult
+        end
+    end
+
+    if not isAdmin then
         print("❌ [会员管理适配器] 管理员权限检查失败")
         return
     end

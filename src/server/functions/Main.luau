@@ -24,7 +24,7 @@ local UtilsFolder = game:GetService("ServerScriptService"):WaitForChild("utils")
 local UserService = require(ServicesFolder:WaitForChild("UserService"))
 local AdminService = require(ServicesFolder:WaitForChild("AdminService"))
 local DroneService = require(ServicesFolder:WaitForChild("DroneService"))
-local TargetService = require(UtilsFolder:WaitForChild("TargetService"))
+local TargetService = require(ServicesFolder:WaitForChild("TargetService"))
 
 -- 初始化靶子系统
 TargetService.initialize()

@@ -70,7 +70,8 @@ local services = {
     CacheService = getServiceModule("CacheService"),
     DataService = getServiceModule("DataService"),
     DroneService = getServiceModule("DroneService"),
-    UserService = getServiceModule("UserService")
+    UserService = getServiceModule("UserService"),
+    TargetService = getServiceModule("TargetService")
 }
 
 -- 第四步：启动功能模块
@@ -90,5 +91,13 @@ local function getBootstrap()
 end
 
 local Bootstrap = getBootstrap()
+
+-- 初始化靶子系统
+if services.TargetService and services.TargetService.initialize then
+    services.TargetService.initialize()
+    print("🎯 靶子系统已初始化")
+else
+    warn("⚠️ TargetService 未找到或缺少 initialize 方法")
+end
 
 print("✅ [服务端] 商店系统已完全启动")
