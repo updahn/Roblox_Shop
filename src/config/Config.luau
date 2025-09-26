@@ -156,11 +156,6 @@ Config.DEBUG = {
     -- 是否启用性能监控
     PERFORMANCE_MONITORING = true,
 
-    -- 测试数据
-    TEST_DATA = {
-        MOCK_DELAY = 1000, -- 毫秒
-        FAKE_NETWORK_ISSUES = false
-    }
 }
 
 -- ==============================================

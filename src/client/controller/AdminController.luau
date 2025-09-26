@@ -1,5 +1,6 @@
--- 管理员控制器
--- 整合管理员相关的远程通信和本地数据管理功能
+-- 管理员控制器 - 重构版本
+-- 负责管理员相关的业务逻辑处理，不直接访问UI
+-- 通过事件系统与UI层通信，实现分层架构
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -9,8 +10,8 @@ local AdminController = {}
 local Events = nil
 local RemoteEvents = {}
 
--- 内部事件系统
-local internalEvents = {
+-- 管理员数据事件系统（供UI监听）
+local AdminDataEvents = {
     AllUsersReceived = Instance.new("BindableEvent"),
     UserCoinsSet = Instance.new("BindableEvent"),
     UserHistoryReceived = Instance.new("BindableEvent"),
@@ -26,9 +27,9 @@ local internalEvents = {
     PermissionChecked = Instance.new("BindableEvent")
 }
 
--- 导出事件
+-- 导出事件供UI层监听
 AdminController.Events = {}
-for eventName, event in pairs(internalEvents) do
+for eventName, event in pairs(AdminDataEvents) do
     AdminController.Events[eventName] = event.Event
 end
 
@@ -83,7 +84,7 @@ function AdminController.checkPermission()
             return RemoteEvents.CheckPermission:InvokeServer()
         end)
         local hasPermission = success and result or false
-        internalEvents.PermissionChecked:Fire(hasPermission)
+        AdminDataEvents.PermissionChecked:Fire(hasPermission)
         return hasPermission
     end
     return false
@@ -197,11 +198,11 @@ function AdminController.batchMembershipOperation(operation, userIds)
 end
 
 -- 管理用户会员
-function AdminController.manageUserMembership(userId, action, data)
+function AdminController.manageUserMembership(requestData)
     initializeEvents()
     if RemoteEvents.ManageUserMembership then
-        RemoteEvents.ManageUserMembership:FireServer(userId, action, data)
-        print("👑 [AdminController] 管理用户会员:", userId, action)
+        RemoteEvents.ManageUserMembership:FireServer(requestData)
+        print("👑 [AdminController] 管理用户会员:", requestData.userId or requestData.playerName, requestData.action)
     end
 end
 
@@ -220,10 +221,10 @@ function AdminController.initializeEventListeners()
         eventConnections.getAllUsers = RemoteEvents.GetAllUsers.OnClientEvent:Connect(function(success, message, data)
             if success then
                 print("✅ [AdminController] 获取所有用户成功")
-                internalEvents.AllUsersReceived:Fire(success, message, data)
+                AdminDataEvents.AllUsersReceived:Fire(success, message, data)
             else
                 warn("❌ [AdminController] 获取所有用户失败:", message)
-                internalEvents.AllUsersReceived:Fire(success, message, nil)
+                AdminDataEvents.AllUsersReceived:Fire(success, message, nil)
             end
         end)
     end
@@ -236,7 +237,7 @@ function AdminController.initializeEventListeners()
             else
                 warn("❌ [AdminController] 设置用户金币失败:", message)
             end
-            internalEvents.UserCoinsSet:Fire(success, message)
+            AdminDataEvents.UserCoinsSet:Fire(success, message)
         end)
     end
 
@@ -245,10 +246,10 @@ function AdminController.initializeEventListeners()
         eventConnections.getUserHistory = RemoteEvents.GetUserHistory.OnClientEvent:Connect(function(success, message, data)
             if success then
                 print("✅ [AdminController] 获取用户历史记录成功")
-                internalEvents.UserHistoryReceived:Fire(success, message, data)
+                AdminDataEvents.UserHistoryReceived:Fire(success, message, data)
             else
                 warn("❌ [AdminController] 获取用户历史记录失败:", message)
-                internalEvents.UserHistoryReceived:Fire(success, message, nil)
+                AdminDataEvents.UserHistoryReceived:Fire(success, message, nil)
             end
         end)
     end
@@ -258,10 +259,10 @@ function AdminController.initializeEventListeners()
         eventConnections.getMembersList = RemoteEvents.GetMembersList.OnClientEvent:Connect(function(success, message, data)
             if success then
                 print("✅ [AdminController] 获取会员列表成功")
-                internalEvents.MembersListReceived:Fire(success, message, data)
+                AdminDataEvents.MembersListReceived:Fire(success, message, data)
             else
                 warn("❌ [AdminController] 获取会员列表失败:", message)
-                internalEvents.MembersListReceived:Fire(success, message, nil)
+                AdminDataEvents.MembersListReceived:Fire(success, message, nil)
             end
         end)
     end
@@ -271,10 +272,10 @@ function AdminController.initializeEventListeners()
         eventConnections.getAllUsersWithMembership = RemoteEvents.GetAllUsersWithMembership.OnClientEvent:Connect(function(success, message, data)
             if success then
                 print("✅ [AdminController] 获取所有用户会员信息成功")
-                internalEvents.AllUsersWithMembershipReceived:Fire(success, message, data)
+                AdminDataEvents.AllUsersWithMembershipReceived:Fire(success, message, data)
             else
                 warn("❌ [AdminController] 获取所有用户会员信息失败:", message)
-                internalEvents.AllUsersWithMembershipReceived:Fire(success, message, nil)
+                AdminDataEvents.AllUsersWithMembershipReceived:Fire(success, message, nil)
             end
         end)
     end
@@ -284,10 +285,10 @@ function AdminController.initializeEventListeners()
         eventConnections.getMembershipStatus = RemoteEvents.GetMembershipStatus.OnClientEvent:Connect(function(success, message, data)
             if success then
                 print("✅ [AdminController] 获取用户会员状态成功")
-                internalEvents.MembershipStatusReceived:Fire(success, message, data)
+                AdminDataEvents.MembershipStatusReceived:Fire(success, message, data)
             else
                 warn("❌ [AdminController] 获取用户会员状态失败:", message)
-                internalEvents.MembershipStatusReceived:Fire(success, message, nil)
+                AdminDataEvents.MembershipStatusReceived:Fire(success, message, nil)
             end
         end)
     end
@@ -300,7 +301,7 @@ function AdminController.initializeEventListeners()
             else
                 warn("❌ [AdminController] 更新用户会员失败:", message)
             end
-            internalEvents.MembershipUpdated:Fire(success, message, data)
+            AdminDataEvents.MembershipUpdated:Fire(success, message, data)
         end)
     end
 
@@ -312,7 +313,7 @@ function AdminController.initializeEventListeners()
             else
                 warn("❌ [AdminController] 添加用户会员失败:", message)
             end
-            internalEvents.MembershipAdded:Fire(success, message, data)
+            AdminDataEvents.MembershipAdded:Fire(success, message, data)
         end)
     end
 
@@ -324,7 +325,7 @@ function AdminController.initializeEventListeners()
             else
                 warn("❌ [AdminController] 取消用户会员失败:", message)
             end
-            internalEvents.MembershipCancelled:Fire(success, message, data)
+            AdminDataEvents.MembershipCancelled:Fire(success, message, data)
         end)
     end
 
@@ -336,7 +337,7 @@ function AdminController.initializeEventListeners()
             else
                 warn("❌ [AdminController] 延长用户会员失败:", message)
             end
-            internalEvents.MembershipExtended:Fire(success, message, data)
+            AdminDataEvents.MembershipExtended:Fire(success, message, data)
         end)
     end
 
@@ -348,7 +349,7 @@ function AdminController.initializeEventListeners()
             else
                 warn("❌ [AdminController] 批量会员操作失败:", message)
             end
-            internalEvents.BatchMembershipOpCompleted:Fire(success, message, data)
+            AdminDataEvents.BatchMembershipOpCompleted:Fire(success, message, data)
         end)
     end
 
@@ -360,7 +361,7 @@ function AdminController.initializeEventListeners()
             else
                 warn("❌ [AdminController] 用户会员管理失败:", message)
             end
-            internalEvents.UserMembershipManaged:Fire(success, message, data)
+            AdminDataEvents.UserMembershipManaged:Fire(success, message, data)
         end)
     end
 

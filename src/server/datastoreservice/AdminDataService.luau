@@ -1,7 +1,7 @@
 -- 管理员数据服务 - 替换 adminSQLOperations.js
 -- 处理所有管理员相关的数据操作
 
-local DataStoreManager = require(game:GetService("ServerScriptService").Server.datastoreservice.DataStoreManager)
+local DataStoreManager = require(game:GetService("ServerScriptService").Server.services.DataStoreManager)
 local UserDataService = require(game:GetService("ServerScriptService").Server.datastoreservice.UserDataService)
 local HttpService = game:GetService("HttpService")
 
@@ -168,28 +168,40 @@ function AdminDataService.updateUserCoins(userId, coins, reason, adminUserId)
     userId = tostring(userId)
     adminUserId = tostring(adminUserId)
 
+    -- 先获取当前用户数据以计算金币变化
+    local currentUserData = DataStoreManager.safeGetAsync("USERS", userId, nil)
+    if not currentUserData then
+        return false, "用户不存在"
+    end
+
+    local coinsBefore = currentUserData.coins
+    local coinsAfter = coins
+    local coinsDifference = coinsAfter - coinsBefore
+
+    -- 更新用户金币
     local success, result = DataStoreManager.safeUpdateAsync("USERS", userId, function(currentData)
         if not currentData then
             error("用户不存在")
         end
 
-        local coinsBefore = currentData.coins
-        local coinsAfter = coins
-        local coinsDifference = coinsAfter - coinsBefore
-
         currentData.coins = coins
         currentData.updatedAt = os.time()
 
-        return currentData, coinsBefore, coinsAfter, coinsDifference
+        return currentData
     end)
 
     if success and result then
-        local coinsBefore, coinsAfter, coinsDifference = result[2], result[3], result[4]
-
         -- 记录交易
+        print("🔧 [AdminDataService] 记录管理员金币调整交易:")
+        print("  用户ID:", userId)
+        print("  交易类型: admin")
+        print("  金币前:", coinsBefore)
+        print("  金币后:", coinsAfter)
+        print("  金币差值:", coinsDifference)
+
         UserDataService.addTransactionRecord(
             userId, "admin", nil, 1, coinsDifference, coinsDifference,
-            coinsBefore, coinsAfter, reason or "管理员调整金币"
+            coinsBefore, coinsAfter, reason or ("管理员调整 by " .. adminUserId)
         )
 
         -- 记录管理员操作日志
@@ -1265,11 +1277,6 @@ function AdminDataService.getAllUsersData()
         end
     end
 
-    -- 如果没有找到任何用户，尝试从模拟数据存储获取（Studio模式）
-    if next(usersData) == nil and DataStoreManager.isStudioMode then
-        local mockUsers = DataStoreManager.getDataStore("USERS")
-        return mockUsers or {}
-    end
 
     return usersData
 end

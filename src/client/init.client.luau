@@ -85,69 +85,20 @@ local function waitForServerData()
     return true
 end
 
--- 设置控制器事件绑定
+-- 重构后不需要在这里设置控制器事件绑定
+-- UI层会自己监听Controller的事件
 local function setupControllerBindings()
-    if not UserController then return end
-
-    -- 绑定用户数据变化到UI更新
-    UserController.Events.PlayerDataChanged:Connect(function(newData)
-        print("📊 [客户端] 玩家数据已变化")
-        if ShopUI and ShopUI.updatePlayerData then
-            ShopUI.updatePlayerData(newData)
-        end
-    end)
-
-    UserController.Events.ShopDataChanged:Connect(function(newData)
-        print("🏪 [客户端] 商店数据已变化")
-        if ShopUI and ShopUI.updateShopData then
-            ShopUI.updateShopData(newData)
-        end
-    end)
-
-    UserController.Events.LoadingStateChanged:Connect(function(isLoading)
-        print("⏳ [客户端] 加载状态:", isLoading and "加载中" or "已完成")
-    end)
-
-    -- 绑定购买和出售结果
-    UserController.Events.BuyResult:Connect(function(success, message, newData)
-        if success then
-            print("✅ [客户端] 购买成功:", message)
-        else
-            print("❌ [客户端] 购买失败:", message)
-        end
-    end)
-
-    UserController.Events.SellResult:Connect(function(success, message, newData)
-        if success then
-            print("✅ [客户端] 出售成功:", message)
-        else
-            print("❌ [客户端] 出售失败:", message)
-        end
-    end)
-
-    print("✅ 控制器事件绑定完成")
+    -- Controller层通过事件系统与UI层解耦
+    -- UI模块会自行连接到Controller事件
+    print("✅ 分层架构：Controller和UI通过事件系统通信")
 end
 
--- 设置无人机控制器绑定
+-- 无人机控制器绑定（事件解耦）
 local function setupDroneBindings()
     if not DroneController then return end
 
-    DroneController.Events.DroneStatusChanged:Connect(function(status)
-        print("🤖 [客户端] 无人机状态变化:", status.isActive and "激活" or "待命")
-        if DroneUI and DroneUI.updateStatus then
-            DroneUI.updateStatus(status)
-        end
-    end)
-
-    DroneController.Events.DroneSpawned:Connect(function(success)
-        if success then
-            print("✅ [客户端] 无人机召唤成功")
-        else
-            print("❌ [客户端] 无人机召唤失败")
-        end
-    end)
-
-    print("✅ 无人机事件绑定完成")
+    -- 无人机UI会自行监听DroneController的事件
+    print("✅ 无人机Controller和UI通过事件系统通信")
 end
 
 -- UI控制功能
@@ -276,53 +227,20 @@ local function initializeControllers()
     return initSuccess
 end
 
--- 初始化UI模块
+-- 初始化UI模块（分层架构）
 local function initializeUI()
-    -- 初始化ShopUI（使用新的控制器架构）
-    if ShopUI and ShopUI.initWithControllers then
+    -- UI模块现在通过事件系统与Controller通信，不需要直接传递Controller引用
+
+    -- 初始化ShopUI
+    if ShopUI and ShopUI.init then
         local shopSuccess, shopError = pcall(function()
-            ShopUI.initWithControllers(UserController, AdminController)
+            ShopUI.init()
         end)
         if shopSuccess then
             print("✅ [客户端] ShopUI初始化成功")
         else
             warn("❌ [客户端] ShopUI初始化失败:", shopError)
         end
-    elseif ShopUI and ShopUI.init then
-        -- 后备方案：使用旧的初始化方法
-        local shopSuccess, shopError = pcall(function()
-            ShopUI.init()
-        end)
-        if shopSuccess then
-            print("✅ [客户端] ShopUI初始化成功（使用兼容模式）")
-        else
-            warn("❌ [客户端] ShopUI初始化失败:", shopError)
-        end
-    end
-
-    -- 为其他UI模块设置控制器
-    if ShopRecords and ShopRecords.setControllers then
-        pcall(function()
-            ShopRecords.setControllers(UserController, AdminController)
-        end)
-    end
-
-    if ShopAdminPanel and ShopAdminPanel.setControllers then
-        pcall(function()
-            ShopAdminPanel.setControllers(AdminController)
-        end)
-    end
-
-    if DroneUI and DroneUI.setControllers then
-        pcall(function()
-            DroneUI.setControllers(DroneController)
-        end)
-    end
-
-    if TutorialUI and TutorialUI.setControllers then
-        pcall(function()
-            TutorialUI.setControllers()
-        end)
     end
 
     -- 初始化TutorialUI
@@ -349,32 +267,19 @@ local function initializeUI()
         end
     end
 
-    -- 初始化DroneUI（使用控制器连接）
-    if DroneUI and DroneController then
-        if DroneUI.initWithController then
-            local droneSuccess, droneError = pcall(function()
-                DroneUI.initWithController(DroneController)
-            end)
-            if not droneSuccess then
-                warn("❌ [客户端] DroneUI初始化失败:", droneError)
-            else
-                print("✅ [客户端] DroneUI初始化成功")
-            end
-        elseif DroneUI.init then
-            -- 后备方案：使用普通初始化
-            local droneSuccess, droneError = pcall(function()
-                DroneUI.init()
-                if DroneUI.setDroneController then
-                    DroneUI.setDroneController(DroneController)
-                end
-            end)
-            if not droneSuccess then
-                warn("❌ [客户端] DroneUI初始化失败:", droneError)
-            else
-                print("✅ [客户端] DroneUI初始化成功")
-            end
+    -- 初始化DroneUI
+    if DroneUI and DroneUI.init then
+        local droneSuccess, droneError = pcall(function()
+            DroneUI.init()
+        end)
+        if not droneSuccess then
+            warn("❌ [客户端] DroneUI初始化失败:", droneError)
+        else
+            print("✅ [客户端] DroneUI初始化成功")
         end
     end
+
+    print("✅ [客户端] 分层架构UI初始化完成")
 end
 
 -- 加载初始数据

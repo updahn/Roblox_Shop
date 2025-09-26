@@ -13,7 +13,9 @@ local SharedModules = ReplicatedStorage:WaitForChild("SharedModules")
 local Config = require(SharedModules:WaitForChild("Config"))
 
 -- 引入TargetController
-local TargetController = require(script.Parent.Parent.controller.TargetController)
+local Players = game:GetService("Players")
+local StarterPlayer = game:GetService("StarterPlayer")
+local TargetController = require(StarterPlayer.StarterPlayerScripts.Client.controller.TargetController)
 
 local TargetUI = {}
 

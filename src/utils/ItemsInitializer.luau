@@ -4,12 +4,9 @@
 -- 获取DataStoreManager模块
 local function getDataStoreManager()
     local ServerScriptService = game:GetService("ServerScriptService")
-    local serverFolder = ServerScriptService:FindFirstChild("Server")
-    if serverFolder then
-        local datastoreFolder = serverFolder:FindFirstChild("datastoreservice")
-        if datastoreFolder and datastoreFolder:FindFirstChild("DataStoreManager") then
-            return require(datastoreFolder.DataStoreManager)
-        end
+    local servicesFolder = ServerScriptService.Server.services
+    if servicesFolder and servicesFolder:FindFirstChild("DataStoreManager") then
+        return require(servicesFolder.DataStoreManager)
     end
     error("❌ 无法加载DataStoreManager模块")
 end

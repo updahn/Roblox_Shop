@@ -15,6 +15,13 @@ local function getDataStoreModule(moduleName)
     local ServerScriptService = game:GetService("ServerScriptService")
     local serverFolder = ServerScriptService:FindFirstChild("Server")
     if serverFolder then
+        -- 首先检查services文件夹
+        local servicesFolder = serverFolder:FindFirstChild("services")
+        if servicesFolder and servicesFolder:FindFirstChild(moduleName) then
+            return require(servicesFolder[moduleName])
+        end
+
+        -- 然后检查datastoreservice文件夹
         local datastoreFolder = serverFolder:FindFirstChild("datastoreservice")
         if datastoreFolder and datastoreFolder:FindFirstChild(moduleName) then
             return require(datastoreFolder[moduleName])
@@ -324,7 +331,7 @@ function DataService.manageUserMembership(adminUserId: string, requestData: any)
         if success and response then
             response = {success = true, message = "会员激活成功", data = response}
         else
-            response = {success = false, error = response or "激活会员失败"}
+            response = {success = false, error = response or "激活会员失败", message = response or "激活会员失败"}
         end
 
     elseif action == "deactivate" then
@@ -336,7 +343,7 @@ function DataService.manageUserMembership(adminUserId: string, requestData: any)
         if success and response and response.success then
             response = {success = true, message = response.message, data = response}
         else
-            response = {success = false, error = response or "停用会员失败"}
+            response = {success = false, error = response or "停用会员失败", message = response or "停用会员失败"}
         end
 
     elseif action == "set_days" then
@@ -395,7 +402,7 @@ function DataService.manageUserMembership(adminUserId: string, requestData: any)
         if success and response and response.success then
             response = {success = true, message = response.message or "每日奖励设置成功", data = response}
         else
-            response = {success = false, error = response or "设置每日奖励失败"}
+            response = {success = false, error = response or "设置每日奖励失败", message = response or "设置每日奖励失败"}
         end
     else
         print("❌ [ManageUserMembership] 未知的操作类型:", action)

@@ -3,6 +3,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
 local AdminService = {}
 
@@ -23,49 +24,9 @@ local function getServiceModule(moduleName)
     error("❌ 无法加载服务模块: " .. moduleName)
 end
 
--- 延迟加载所有服务模块，避免循环依赖
-local DataService = nil
-local UserService = nil
-local CacheService = nil
-
--- 获取数据服务（延迟初始化）
-local function getDataService()
-    if not DataService then
-        local success, result = pcall(function()
-            return getServiceModule("DataService")
-        end)
-        if success then
-            DataService = result
-        else
-            warn("❌ AdminService: 无法加载 DataService - " .. tostring(result))
-        end
-    end
-    return DataService
-end
-
--- 获取用户服务（延迟初始化）
-local function getUserService()
-    if not UserService then
-        local success, result = pcall(function()
-            return getServiceModule("UserService")
-        end)
-        if success then
-            UserService = result
-        else
-            warn("❌ AdminService: 无法加载 UserService - " .. tostring(result))
-        end
-    end
-    return UserService
-end
-
--- 获取缓存服务（延迟初始化）
--- 管理员权限验证结果将被缓存3分钟，提高性能
-local function getCacheService()
-    if not CacheService then
-        CacheService = getServiceModule("CacheService")
-    end
-    return CacheService
-end
+-- 直接加载同层级服务模块
+local DataService = getServiceModule("DataService")
+local CacheService = getServiceModule("CacheService")
 
 -- ==============================================
 -- 权限检查
@@ -78,10 +39,9 @@ function AdminService.isValidAdmin(player: Player): boolean
     end
 
     local userId = tostring(player.UserId)
-    local cacheService = getCacheService()
 
     -- 检查缓存
-    local cachedResult = cacheService.getAdminPermission(userId)
+    local cachedResult = CacheService.getAdminPermission(userId)
     if cachedResult ~= nil then
         return cachedResult
     end
@@ -102,16 +62,13 @@ function AdminService.isValidAdmin(player: Player): boolean
     local isDataAdmin = false
     if not isConfigAdmin then
         -- 只有当配置文件检查不通过时才查询数据库
-        local dataService = getDataService()
-        if dataService then
-            isDataAdmin, _ = dataService.checkAdminPermission(userId)
-        end
+        isDataAdmin, _ = DataService.checkAdminPermission(userId)
     end
 
     local finalIsAdmin = isConfigAdmin or isDataAdmin
 
     -- 缓存结果
-    cacheService.cacheAdminPermission(userId, finalIsAdmin, 180) -- 缓存3分钟
+    CacheService.cacheAdminPermission(userId, finalIsAdmin, 180) -- 缓存3分钟
 
     if isConfigAdmin then
         print("✅ [AdminService]", player.Name, "管理员权限验证通过（配置文件）")
@@ -133,7 +90,7 @@ local function handleGetAllUsers(player: Player)
 
     if not AdminService.isValidAdmin(player) then
         print("❌ [权限错误] 用户", player.Name, "不是管理员")
-        Events.Admin.GetAllUsers:FireClient(player, nil, "权限不足：您不是管理员")
+        Events.Admin.GetAllUsers:FireClient(player, false, "权限不足：您不是管理员", nil)
         return
     end
 
@@ -141,29 +98,26 @@ local function handleGetAllUsers(player: Player)
     print("👑 [调试] 管理员权限验证通过，开始认证检查")
 
     -- 检查用户是否已认证，如果没有则尝试自动认证
-    local userService = getUserService()
-    local session = userService and userService.isPlayerAuthenticated(player)
+    local session = DataService.isAuthenticated(userId)
     if not session then
         print("👑 [调试] 管理员未认证，尝试自动认证")
-        local dataService = getDataService()
-        local authSuccess, userData = dataService and dataService.authenticateUser(userId, player.Name, player.DisplayName)
+        local authSuccess, userData = DataService.authenticateUser(userId, player.Name, player.DisplayName)
         if not authSuccess then
             print("❌ [认证失败] 管理员", player.Name, "认证失败")
-            Events.Admin.GetAllUsers:FireClient(player, nil, "认证失败，请重新进入游戏")
+            Events.Admin.GetAllUsers:FireClient(player, false, "认证失败，请重新进入游戏", nil)
             return
         end
         print("✅ [认证成功] 管理员", player.Name, "自动认证成功")
     end
 
     print("👑 [调试] 开始获取用户数据...")
-    local dataService = getDataService()
-    local success, allUsersData, errorMsg = dataService and dataService.getAllUsers(userId, 50, 0, true)
+    local success, allUsersData, errorMsg = DataService.getAllUsers(userId, 50, 0, true)
 
     if success and allUsersData then
         local allPlayersData = {}
         for _, user in ipairs(allUsersData.users) do
             -- 获取用户库存数据
-            local inventory = dataService and dataService.getUserInventory(tostring(user.id))
+            local inventory = DataService.getUserInventory(tostring(user.id))
             local inventoryCount = 0
             if inventory then
                 for itemId, quantity in pairs(inventory) do
@@ -199,7 +153,7 @@ local function handleGetAllUsers(player: Player)
         print("👑 [调试] 准备发送数据给客户端，玩家数量:", playerCount)
         print("👑 [调试] 发送的数据:", allPlayersData)
 
-        Events.Admin.GetAllUsers:FireClient(player, allPlayersData)
+        Events.Admin.GetAllUsers:FireClient(player, true, "成功获取用户数据", allPlayersData)
         print("👑 [管理员] " .. player.Name .. " 查看了所有用户数据")
     else
         local errorMessage = errorMsg or "无法获取用户数据"
@@ -208,7 +162,7 @@ local function handleGetAllUsers(player: Player)
         -- 检查是否是认证问题
         if errorMsg and string.find(errorMsg, "认证") then
             print("❌ [认证问题] 管理员认证失败，发送认证错误")
-            Events.Admin.GetAllUsers:FireClient(player, nil, "认证失败：" .. errorMessage)
+            Events.Admin.GetAllUsers:FireClient(player, false, "认证失败：" .. errorMessage, nil)
             return
         end
 
@@ -218,64 +172,8 @@ local function handleGetAllUsers(player: Player)
             "数据加载失败：%s\n\n可能的原因：\n• 数据存储服务异常\n• 网络连接问题\n• 权限配置错误\n\n请稍后重试或联系管理员",
             errorMessage
         )
-        Events.Admin.GetAllUsers:FireClient(player, nil, detailedError)
+        Events.Admin.GetAllUsers:FireClient(player, false, detailedError, nil)
 
-        -- 同时提供一些基本的模拟数据作为备选
-        print("👑 [调试] 同时提供模拟数据作为备选")
-        spawn(function()
-            wait(1) -- 等待1秒后再发送模拟数据
-            local mockData = {
-                [player.Name] = {
-                    userId = player.UserId,
-                    name = player.Name,
-                    coins = 1000,
-                    totalPurchases = 5,
-                    totalSpent = 500,
-                    totalSales = 3,
-                    totalEarned = 300,
-                    inventoryCount = 10,
-                    membership_status = "active",
-                    end_date = "2024-12-31",
-                    days_remaining = 30,
-                    daily_reward_coins = 100
-                },
-                ["模拟用户1"] = {
-                    userId = 12345,
-                    name = "模拟用户1",
-                    coins = 500,
-                    totalPurchases = 2,
-                    totalSpent = 200,
-                    totalSales = 1,
-                    totalEarned = 100,
-                    inventoryCount = 5,
-                    membership_status = "none",
-                    end_date = nil,
-                    days_remaining = 0,
-                    daily_reward_coins = 100
-                },
-                ["模拟用户2"] = {
-                    userId = 67890,
-                    name = "模拟用户2",
-                    coins = 2000,
-                    totalPurchases = 10,
-                    totalSpent = 1000,
-                    totalSales = 8,
-                    totalEarned = 800,
-                    inventoryCount = 15,
-                    membership_status = "active",
-                    end_date = "2024-10-15",
-                    days_remaining = 15,
-                    daily_reward_coins = 150
-                }
-            }
-
-            print("👑 [调试] 发送模拟数据:", mockData)
-            -- 先发送一个提示，告知这是模拟数据
-            Events.Admin.GetAllUsers:FireClient(player, nil, "注意：以下为模拟数据（数据服务离线）")
-            wait(0.5)
-            Events.Admin.GetAllUsers:FireClient(player, mockData)
-            print("👑 [管理员] " .. player.Name .. " 查看了模拟用户数据（数据服务不可用）")
-        end)
     end
 end
 
@@ -303,8 +201,7 @@ local function handleSetUserCoins(player: Player, targetPlayerName: string, newC
     end
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, message = dataService and dataService.setUserCoins(adminUserId, targetUserId, newCoins, "管理员调整 by " .. player.Name)
+    local success, message = DataService.setUserCoins(adminUserId, targetUserId, newCoins, "管理员调整 by " .. player.Name)
 
     if success then
         Events.Admin.SetUserCoins:FireClient(player, true, message)
@@ -316,11 +213,76 @@ local function handleSetUserCoins(player: Player, targetPlayerName: string, newC
 
             -- 延迟一点时间确保数据已保存，然后通知目标玩家刷新
             spawn(function()
-                task.wait(0.2) -- 稍等片刻确保数据已保存
+                task.wait(0.3) -- 稍等片刻确保数据已保存
 
-                -- 通过事件触发目标玩家的数据刷新
-                Events.User.RefreshData:FireClient(targetPlayer)
-                print("✅ [数据同步] 已通知 " .. targetPlayerName .. " 刷新数据")
+                -- 先清除用户缓存，确保获取到最新数据
+                CacheService.refreshUserCache(tostring(targetPlayer.UserId), false)
+
+                -- 通过DataService获取完整的用户数据，包括交易记录
+                local userData = DataService.getUserData(tostring(targetPlayer.UserId))
+                local inventory = DataService.getUserInventory(tostring(targetPlayer.UserId))
+                local membershipStatus = DataService.getMembershipStatus(tostring(targetPlayer.UserId))
+
+                -- 获取用户交易记录
+                local transactionSuccess, transactionData, _ = DataService.getUserTransactions(tostring(targetPlayer.UserId), 20, 0, nil)
+
+                if userData then
+                    print("💰 [数据同步] 获取到 " .. targetPlayerName .. " 的最新金币数据:", userData.coins)
+
+                    -- 构造完整的玩家数据，包含最新的交易记录
+                    local playerData = {
+                        coins = userData.coins,
+                        inventory = inventory or {},
+                        membership = membershipStatus or {
+                            hasMembership = false,
+                            isValid = false,
+                            daysRemaining = 0,
+                            membershipType = nil,
+                            startDate = nil,
+                            endDate = nil,
+                            dailyReward = 0
+                        },
+                        stats = {
+                            totalPurchases = userData.total_purchases or 0,
+                            totalSales = userData.total_sales or 0,
+                            totalSpent = userData.total_spent or 0,
+                            totalEarned = userData.total_earned or 0
+                        },
+                        transactionHistory = {}
+                    }
+
+                    -- 添加交易记录到玩家数据中
+                    if transactionSuccess and transactionData and transactionData.transactions then
+                        for _, transaction in ipairs(transactionData.transactions) do
+                            -- 确保时间戳字段存在和正确
+                            local createdAt = transaction.created_at or transaction.timestamp or os.time()
+                            local transactionDate = transaction.transaction_date or os.date("%Y-%m-%d", createdAt)
+
+                            table.insert(playerData.transactionHistory, {
+                                id = transaction.id,
+                                itemId = transaction.item_id,
+                                itemName = transaction.item_name,
+                                type = transaction.type,
+                                quantity = transaction.quantity,
+                                unitPrice = transaction.unit_price,
+                                totalAmount = transaction.total_amount,
+                                transactionDate = transactionDate,
+                                createdAt = createdAt,
+                                timestamp = createdAt -- 为了兼容性
+                            })
+                        end
+                    end
+
+                    -- 通过GetPlayerData事件发送完整数据更新
+                    Events.User.GetPlayerData:FireClient(targetPlayer, true, playerData)
+                    print("✅ [数据同步] 已通知 " .. targetPlayerName .. " 完整数据刷新 | 金币: " .. playerData.coins .. " | 交易记录: " .. #playerData.transactionHistory .. " 条")
+                else
+                    -- 发送失败的刷新响应
+                    Events.User.RefreshData:FireClient(targetPlayer, false, {
+                        message = "数据刷新失败"
+                    })
+                    print("❌ [数据同步] " .. targetPlayerName .. " 数据刷新失败")
+                end
             end)
         end
     else
@@ -335,15 +297,22 @@ end
 local function handleGetMembersList(player: Player, page: number?, limit: number?, status: string?)
     if not AdminService.isValidAdmin(player) then
         print("⚠️ [权限警告] " .. player.Name .. " 尝试获取会员列表，但不是管理员")
-        Events.Admin.GetMembersList:FireClient(player, false, {error = "权限不足"})
+        Events.Admin.GetMembersList:FireClient(player, false, "权限不足", {error = "权限不足"})
         return
     end
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, response = dataService and dataService.getMembersList(adminUserId, page, limit, status)
+    local success, response = DataService.getMembersList(adminUserId, page, limit, status)
 
-    Events.Admin.GetMembersList:FireClient(player, success, response)
+    if success then
+        Events.Admin.GetMembersList:FireClient(player, true, "成功获取会员列表", response)
+    else
+        local errorMessage = "获取会员列表失败"
+        if response and response.error then
+            errorMessage = response.error
+        end
+        Events.Admin.GetMembersList:FireClient(player, false, errorMessage, response)
+    end
 
     if success then
         print("👑 [管理员] " .. player.Name .. " 查看了会员列表")
@@ -360,8 +329,7 @@ local function handleUpdateMembership(player: Player, membershipData)
     end
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, message, data = dataService and dataService.updatePlayerMembership(
+    local success, message, data = DataService.updatePlayerMembership(
         adminUserId,
         membershipData.playerName,
         membershipData.membershipType,
@@ -386,8 +354,7 @@ local function handleAddMembership(player: Player, playerName: string, days: num
     end
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, message, data = dataService and dataService.addPlayerMembership(adminUserId, playerName, days)
+    local success, message, data = DataService.addPlayerMembership(adminUserId, playerName, days)
 
     Events.Admin.AddMembership:FireClient(player, success, message, data)
 
@@ -406,8 +373,7 @@ local function handleCancelMembership(player: Player, playerName: string)
     end
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, message, data = dataService and dataService.cancelPlayerMembership(adminUserId, playerName)
+    local success, message, data = DataService.cancelPlayerMembership(adminUserId, playerName)
 
     Events.Admin.CancelMembership:FireClient(player, success, message, data)
 
@@ -426,8 +392,7 @@ local function handleExtendMembership(player: Player, playerName: string, days: 
     end
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, message, data = dataService and dataService.extendPlayerMembership(adminUserId, playerName, days)
+    local success, message, data = DataService.extendPlayerMembership(adminUserId, playerName, days)
 
     Events.Admin.ExtendMembership:FireClient(player, success, message, data)
 
@@ -446,8 +411,7 @@ local function handleBatchMembershipOp(player: Player, playerNames: {string}, ac
     end
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, message, data = dataService and dataService.batchMembershipOperation(adminUserId, playerNames, action, days)
+    local success, message, data = DataService.batchMembershipOperation(adminUserId, playerNames, action, days)
 
     Events.Admin.BatchMembershipOp:FireClient(player, success, message, data)
 
@@ -461,15 +425,26 @@ end
 local function handleGetAllUsersWithMembership(player: Player, page: number?, limit: number?, status: string?)
     if not AdminService.isValidAdmin(player) then
         print("⚠️ [权限警告] " .. player.Name .. " 尝试获取用户会员数据，但不是管理员")
-        Events.Admin.GetAllUsersWithMembership:FireClient(player, false, {error = "权限不足"})
+        Events.Admin.GetAllUsersWithMembership:FireClient(player, false, "权限不足", {error = "权限不足"})
         return
     end
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, response = dataService and dataService.getAllUsersWithMembership(adminUserId, page, limit, status)
+    local success, response = DataService.getAllUsersWithMembership(adminUserId, page, limit, status)
 
-    Events.Admin.GetAllUsersWithMembership:FireClient(player, success, response)
+    if success then
+        -- 确保响应格式正确
+        Events.Admin.GetAllUsersWithMembership:FireClient(player, true, "成功获取会员数据", response)
+    else
+        -- 处理失败情况，确保message字段存在
+        local errorMessage = "获取会员数据失败"
+        if response and response.message then
+            errorMessage = response.message
+        elseif response and response.error then
+            errorMessage = response.error
+        end
+        Events.Admin.GetAllUsersWithMembership:FireClient(player, false, errorMessage, response)
+    end
 
     if success then
         print("👑 [管理员] " .. player.Name .. " 查看了所有用户会员状态")
@@ -481,20 +456,44 @@ end
 local function handleManageUserMembership(player: Player, requestData)
     if not AdminService.isValidAdmin(player) then
         print("⚠️ [权限警告] " .. player.Name .. " 尝试管理用户会员，但不是管理员")
-        Events.Admin.ManageUserMembership:FireClient(player, false, {error = "权限不足"})
+        Events.Admin.ManageUserMembership:FireClient(player, false, {error = "权限不足", message = "权限不足"})
         return
     end
 
+    print("🔧 [HandleManageUserMembership] 收到请求数据:", HttpService:JSONEncode(requestData))
+
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, response = dataService and dataService.manageUserMembership(adminUserId, requestData)
+    local success, response = DataService.manageUserMembership(adminUserId, requestData)
 
-    Events.Admin.ManageUserMembership:FireClient(player, success, response)
+    -- 确保响应格式正确
+    if success and response then
+        if response.success then
+            print("👑 [管理员] " .. player.Name .. " 管理了用户会员状态")
+            Events.Admin.ManageUserMembership:FireClient(player, true, response.message or "操作成功", response)
+        else
+            local errorMsg = response.error or response.message or "操作失败"
+            print("❌ [错误] " .. player.Name .. " 管理用户会员失败:", errorMsg)
+            Events.Admin.ManageUserMembership:FireClient(player, false, errorMsg, {
+                error = errorMsg,
+                message = errorMsg,
+                success = false
+            })
+        end
+    else
+        local errorMsg = "服务器内部错误"
+        if response then
+            errorMsg = response.error or response.message or errorMsg
+        end
+        print("❌ [错误] " .. player.Name .. " 管理用户会员失败:", errorMsg)
+        Events.Admin.ManageUserMembership:FireClient(player, false, errorMsg, {
+            error = errorMsg,
+            message = errorMsg,
+            success = false
+        })
+    end
 
+    -- 如果操作成功，实时更新目标用户的状态
     if success and response and response.success then
-        print("👑 [管理员] " .. player.Name .. " 管理了用户会员状态")
-
-        -- 实时更新目标用户的状态（如果该用户在线）
         local targetPlayerName = requestData.playerName or requestData.username
         if targetPlayerName then
             -- 查找在线的目标玩家
@@ -503,7 +502,6 @@ local function handleManageUserMembership(player: Player, requestData)
                     print("🔄 [实时更新] 为在线用户", targetPlayerName, "更新会员状态")
 
                     -- 异步刷新目标用户的数据并通知状态变更
-                    local UserService = require(game:GetService("ServerScriptService").Server.services:WaitForChild("UserService"))
                     spawn(function()
                         -- 先清除目标用户的会员缓存
                         local UserDataService = require(game:GetService("ServerScriptService").Server.datastoreservice:WaitForChild("UserDataService"))
@@ -513,13 +511,10 @@ local function handleManageUserMembership(player: Player, requestData)
                         end
 
                         -- 等待短暂时间确保数据保存完成
-                        task.wait(0.2)
+                        task.wait(0.3)
 
-                        -- 刷新用户数据
-                        local userService = getUserService()
-                        if userService then
-                            userService.refreshPlayerData(targetPlayer)
-                        end
+                        -- 通过DataService刷新用户数据（不依赖UserService）
+                        CacheService.refreshUserCache(tostring(targetPlayer.UserId))
 
                         -- 发送会员状态变更通知
                         if Events.User.MembershipStatusChanged then
@@ -537,8 +532,6 @@ local function handleManageUserMembership(player: Player, requestData)
                 end
             end
         end
-    else
-        print("❌ [错误] " .. player.Name .. " 管理用户会员失败")
     end
 end
 
@@ -553,8 +546,7 @@ local function handleGetUserHistory(player: Player, targetPlayerName: string, pa
     print("📜 [管理员] " .. player.Name .. " 正在获取 " .. targetPlayerName .. " 的交易历史")
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, message, data = dataService and dataService.getUserHistory(adminUserId, targetPlayerName, page or 1, limit or 50)
+    local success, message, data = DataService.getUserHistory(adminUserId, targetPlayerName, page or 1, limit or 50)
 
     Events.Admin.GetUserHistory:FireClient(player, success, message, data)
 
@@ -576,8 +568,7 @@ local function handleGetMembershipStatus(player: Player, targetPlayerName: strin
     print("👤 [管理员] " .. player.Name .. " 正在获取 " .. targetPlayerName .. " 的会员状态")
 
     local adminUserId = tostring(player.UserId)
-    local dataService = getDataService()
-    local success, message, data = dataService and dataService.getAdminMembershipStatus(adminUserId, targetPlayerName)
+    local success, message, data = DataService.getAdminMembershipStatus(adminUserId, targetPlayerName)
 
     Events.Admin.GetMembershipStatus:FireClient(player, success, message, data)
 
@@ -639,9 +630,6 @@ Events.Admin.CancelMembership.OnServerEvent:Connect(handleCancelMembership)
 Events.Admin.ExtendMembership.OnServerEvent:Connect(handleExtendMembership)
 Events.Admin.BatchMembershipOp.OnServerEvent:Connect(handleBatchMembershipOp)
 Events.Admin.ManageUserMembership.OnServerEvent:Connect(handleManageUserMembership)
-
-
-
 
 -- 注意：缓存清理现在由CacheManager自动处理
 

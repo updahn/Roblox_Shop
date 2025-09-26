@@ -64,11 +64,6 @@ local function initializeDataStores()
                 print("✅ DataStore 初始化成功:", storeName)
             else
                 warn("❌ DataStore 初始化失败:", storeName, dataStore)
-                -- 在初始化失败时，回退到模拟模式
-                if not mockDataStores[name] then
-                    mockDataStores[name] = {}
-                    print("🔄 回退到模拟DataStore:", storeName)
-                end
             end
         end
     end

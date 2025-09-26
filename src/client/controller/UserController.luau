@@ -1,5 +1,6 @@
--- 用户控制器
--- 整合用户相关的远程通信和本地数据管理功能
+-- 用户控制器 - 重构版本
+-- 负责用户相关的业务逻辑处理，不直接访问UI
+-- 通过事件系统与UI层通信，实现分层架构
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -17,8 +18,8 @@ local localData = {
 local Events = nil
 local RemoteEvents = {}
 
--- 内部事件系统
-local internalEvents = {
+-- 数据变更事件系统（供UI监听）
+local DataEvents = {
     PlayerDataChanged = Instance.new("BindableEvent"),
     ShopDataChanged = Instance.new("BindableEvent"),
     TransactionsChanged = Instance.new("BindableEvent"),
@@ -28,9 +29,9 @@ local internalEvents = {
     DataRefreshed = Instance.new("BindableEvent")
 }
 
--- 导出事件
+-- 导出事件供UI层监听
 UserController.Events = {}
-for eventName, event in pairs(internalEvents) do
+for eventName, event in pairs(DataEvents) do
     UserController.Events[eventName] = event.Event
 end
 
@@ -74,7 +75,7 @@ end
 function UserController.setLoadingState(isLoading)
     if localData.isLoading ~= isLoading then
         localData.isLoading = isLoading
-        internalEvents.LoadingStateChanged:Fire(isLoading)
+        DataEvents.LoadingStateChanged:Fire(isLoading)
         print("🔄 [UserController] 加载状态:", isLoading and "加载中" or "已完成")
     end
 end
@@ -89,7 +90,7 @@ function UserController.updatePlayerData(newData)
     if newData then
         local oldData = localData.playerData
         localData.playerData = newData
-        internalEvents.PlayerDataChanged:Fire(newData, oldData)
+        DataEvents.PlayerDataChanged:Fire(newData, oldData)
         print("✅ [UserController] 玩家数据已更新")
     end
 end
@@ -104,7 +105,7 @@ function UserController.updateShopData(newData)
     if newData then
         local oldData = localData.shopData
         localData.shopData = newData
-        internalEvents.ShopDataChanged:Fire(newData, oldData)
+        DataEvents.ShopDataChanged:Fire(newData, oldData)
         print("✅ [UserController] 商店数据已更新")
     end
 end
@@ -119,7 +120,7 @@ function UserController.updateTransactions(newData)
     if newData then
         local oldData = localData.transactions
         localData.transactions = newData
-        internalEvents.TransactionsChanged:Fire(newData, oldData)
+        DataEvents.TransactionsChanged:Fire(newData, oldData)
         print("✅ [UserController] 交易记录已更新")
     end
 end
@@ -280,6 +281,7 @@ function UserController.initializeEventListeners()
         eventConnections.getPlayerData = RemoteEvents.GetPlayerData.OnClientEvent:Connect(function(success, data)
             UserController.setLoadingState(false)
             if success and data then
+                print("📡 [UserController] 收到服务器推送的玩家数据更新 | 金币:", data.coins or "未知")
                 UserController.updatePlayerData(data)
             else
                 warn("❌ [UserController] 获取玩家数据失败:", data)
@@ -321,7 +323,7 @@ function UserController.initializeEventListeners()
             else
                 warn("❌ [UserController] 购买失败:", message)
             end
-            internalEvents.BuyResult:Fire(success, message, newData)
+            DataEvents.BuyResult:Fire(success, message, newData)
         end)
     end
 
@@ -337,7 +339,7 @@ function UserController.initializeEventListeners()
             else
                 warn("❌ [UserController] 出售失败:", message)
             end
-            internalEvents.SellResult:Fire(success, message, newData)
+            DataEvents.SellResult:Fire(success, message, newData)
         end)
     end
 
@@ -353,7 +355,7 @@ function UserController.initializeEventListeners()
                     UserController.updateTransactions(data.transactions)
                 end
             end
-            internalEvents.DataRefreshed:Fire(success, data)
+            DataEvents.DataRefreshed:Fire(success, data)
         end)
     end
 

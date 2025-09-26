@@ -51,6 +51,9 @@ local lastRequestTime = 0
 local REQUEST_COOLDOWN = 2 -- 增加到2秒，避免过度请求
 local pendingRequestCount = 0 -- 待处理请求计数器
 
+-- 缓存最后的交易记录响应数据
+local lastTransactionData = nil
+
 -- 显示购买记录
 function ShopRecords.showPurchaseRecords(scrollFrame, playerData, showAdminPanel)
     if not scrollFrame then return end
@@ -91,7 +94,9 @@ function ShopRecords.showPurchaseRecords(scrollFrame, playerData, showAdminPanel
     -- 管理员控制按钮（仅管理员可见）- 使用AdminController检查权限
     local isAdmin = false
     local success, AdminController = pcall(function()
-        return require(script.Parent.Parent.controller.AdminController)
+        local Players = game:GetService("Players")
+        local StarterPlayer = game:GetService("StarterPlayer")
+        return require(StarterPlayer.StarterPlayerScripts.Client.controller.AdminController)
     end)
 
     if success and AdminController then
@@ -181,6 +186,10 @@ function ShopRecords.forceRefreshTransactions()
     isRequestingTransactions = false
     pendingRequestCount = 0
 
+    -- 清除缓存的交易数据，强制重新获取
+    lastTransactionData = nil
+    print("🧹 [交易记录] 已清除缓存的交易数据")
+
     -- 如果有活动的scrollFrame，重新显示记录
     if currentScrollFrame and currentShowAdminPanel then
         ShopRecords.showPurchaseRecords(currentScrollFrame, nil, currentShowAdminPanel)
@@ -194,10 +203,48 @@ function ShopRecords.handleTransactionResponse(success, message, responseData)
 
     if not currentScrollFrame then
         print("❌ [交易记录] 没有活动的scrollFrame来更新")
-        return
+        -- 尝试查找当前的记录界面scrollFrame
+        local PlayerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+        local shopGui = PlayerGui:FindFirstChild("ShopGUI")
+        if shopGui then
+            local shopFrame = shopGui:FindFirstChild("ShopFrame")
+            if shopFrame then
+                local contentFrame = shopFrame:FindFirstChild("ContentFrame")
+                if contentFrame then
+                    local scrollFrame = contentFrame:FindFirstChild("ScrollingFrame")
+                    if scrollFrame then
+                        currentScrollFrame = scrollFrame
+                        print("🔄 [交易记录] 重新找到scrollFrame，继续处理响应")
+                    end
+                end
+            end
+        end
+
+        if not currentScrollFrame then
+            print("❌ [交易记录] 无法找到有效的scrollFrame，保存数据供后续使用")
+            -- 保存响应数据，供下次显示时使用
+            if success and responseData then
+                lastTransactionData = {
+                    success = success,
+                    message = message,
+                    data = responseData
+                }
+                print("📊 [交易记录] 已缓存交易数据，包含", (responseData.transactions and #responseData.transactions or 0), "条记录")
+            end
+            return
+        end
     end
 
     print("📊 [交易记录] 收到响应:", success, message)
+
+    -- 保存最新的响应数据
+    if success and responseData then
+        lastTransactionData = {
+            success = success,
+            message = message,
+            data = responseData
+        }
+    end
 
     -- 移除加载提示
     local loadingFrame = currentScrollFrame:FindFirstChild("LoadingRecord")

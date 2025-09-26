@@ -150,14 +150,7 @@ function UserService.isPlayerAdmin(player: Player): boolean
         return true
     end
 
-    -- 备用：检查session中的isAdmin标志
-    local session = getPlayerSession(player)
-    local sessionAdmin = session and session.isAdmin
 
-    if sessionAdmin then
-        print("⚡ [UserService] " .. player.Name .. " 通过session验证为管理员")
-        return true
-    end
 
     print("❌ [UserService] " .. player.Name .. " 不是管理员")
     return false
@@ -460,9 +453,49 @@ local function handleSellItem(player: Player, itemId: string, quantity: number)
 end
 
 local function handleRefreshData(player: Player)
-    -- 刷新玩家数据和商店数据
-    handleGetPlayerData(player)
-    handleGetShopData(player)
+    print("🔄 [UserService] 处理数据刷新请求:", player.Name)
+
+    local session = getPlayerSession(player)
+    if not session or not session.authenticated then
+        warn("❌ [UserService] 用户未认证，无法刷新数据:", player.Name)
+        Events.User.RefreshData:FireClient(player, false, {
+            message = "用户未认证，请重新进入游戏"
+        })
+        return
+    end
+
+    -- 清除用户相关缓存
+    local UserDataService = require(game:GetService("ServerScriptService").Server.datastoreservice:WaitForChild("UserDataService"))
+    if UserDataService.clearMembershipCache then
+        UserDataService.clearMembershipCache(session.userId)
+    end
+
+    -- 获取最新的用户数据
+    local userData = DataService.getUserData(session.userId)
+
+    if userData then
+        -- 更新session中的数据
+        session.userData = userData
+
+        -- 获取商店数据
+        local shopItems = DataService.getShopItems()
+
+        -- 发送成功的刷新响应
+        Events.User.RefreshData:FireClient(player, true, {
+            playerData = userData,
+            shopData = shopItems,
+            message = "数据刷新成功"
+        })
+
+        print("✅ [UserService] " .. player.Name .. " 数据刷新成功")
+    else
+        -- 发送失败的刷新响应
+        Events.User.RefreshData:FireClient(player, false, {
+            message = "无法获取用户数据，可能是认证失败或数据服务异常"
+        })
+
+        warn("❌ [UserService] " .. player.Name .. " 数据刷新失败: 无法获取用户数据")
+    end
 end
 
 local function handleGetTransactions(player: Player, limit: number?, offset: number?, type: string?)

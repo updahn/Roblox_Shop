@@ -1,7 +1,7 @@
 -- 普通用户数据服务 - 替换 userSQLOperations.js
 -- 处理所有普通用户相关的数据操作
 
-local DataStoreManager = require(game:GetService("ServerScriptService").Server.datastoreservice.DataStoreManager)
+local DataStoreManager = require(game:GetService("ServerScriptService").Server.services.DataStoreManager)
 local HttpService = game:GetService("HttpService")
 
 local UserDataService = {}

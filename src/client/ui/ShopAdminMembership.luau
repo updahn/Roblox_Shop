@@ -22,7 +22,9 @@ function ShopMembership.showMembershipUI(screenGui)
     -- 检查管理员权限 - 使用AdminController
     local isAdmin = false
     local success, AdminController = pcall(function()
-        return require(script.Parent.Parent.controller.AdminController)
+        local Players = game:GetService("Players")
+        local StarterPlayer = game:GetService("StarterPlayer")
+        return require(StarterPlayer.StarterPlayerScripts.Client.controller.AdminController)
     end)
 
     if success and AdminController then

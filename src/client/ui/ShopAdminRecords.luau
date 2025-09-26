@@ -27,7 +27,9 @@ function ShopAdminRecords.showAdminPanel(screenGui, showNotification)
     -- 检查管理员权限 - 使用AdminController
     local isAdmin = false
     local success, AdminController = pcall(function()
-        return require(script.Parent.Parent.controller.AdminController)
+        local Players = game:GetService("Players")
+        local StarterPlayer = game:GetService("StarterPlayer")
+        return require(StarterPlayer.StarterPlayerScripts.Client.controller.AdminController)
     end)
 
     if success and AdminController then
@@ -58,7 +60,9 @@ function ShopAdminRecords.showPlayerRecords(playerName, records, screenGui)
     -- 检查管理员权限 - 使用AdminController
     local isAdmin = false
     local success, AdminController = pcall(function()
-        return require(script.Parent.Parent.controller.AdminController)
+        local Players = game:GetService("Players")
+        local StarterPlayer = game:GetService("StarterPlayer")
+        return require(StarterPlayer.StarterPlayerScripts.Client.controller.AdminController)
     end)
 
     if success and AdminController then
@@ -75,9 +79,9 @@ function ShopAdminRecords.showPlayerRecords(playerName, records, screenGui)
         return
     end
 
-    print("✅ [管理员记录适配器] 权限验证通过，使用模拟普通用户记录格式")
+    print("✅ [管理员记录适配器] 权限验证通过，使用普通用户记录格式")
 
-    -- 创建记录查看窗口 - 模仿普通用户交易记录的样式
+    -- 创建记录查看窗口 - 使用普通用户交易记录的样式
     local recordFrame = Instance.new("Frame")
     recordFrame.Name = "PlayerRecordFrame"
     recordFrame.Size = UDim2.new(0, 600, 0, 500)

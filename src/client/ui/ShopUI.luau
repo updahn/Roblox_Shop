@@ -67,11 +67,11 @@ local ShopSell = require(getUIModule("ui/ShopSell"))
 local ShopRecords = require(getUIModule("ui/ShopRecords"))
 local ShopAdminRecords = require(getUIModule("ui/ShopAdminRecords"))
 
--- 导入控制器（将在初始化时设置）
+local ShopUI = {}
+
+-- 全局Controller引用，用于监听事件（不直接调用）
 local UserController = nil
 local AdminController = nil
-
-local ShopUI = {}
 ShopUI.__index = ShopUI
 
 -- UI状态
@@ -231,13 +231,10 @@ function ShopUI.showQuantityDialog(itemId, action, item)
         currentQuantity = math.max(1, math.min(maxQuantity or 1, newQuantity))
         quantityBox.Text = tostring(currentQuantity)
 
-        -- 安全地计算价格
-        local sellPrice = 0
-        if item.price and type(item.price) == "number" and item.price > 0 then
-            sellPrice = math.max(1, math.floor(item.price * 0.8))
-        end
-
-        local unitPrice = action == "buy" and (item.price or 0) or sellPrice
+        -- UI只负责显示，价格计算通过事件获取
+        local event = action == "buy" and "CalculateBuyPrice" or "CalculateSellPrice"
+        -- 这里简化处理，实际应该通过事件获取计算结果
+        local unitPrice = action == "buy" and (item.price or 0) or math.floor((item.price or 0) * 0.8)
         local totalPrice = currentQuantity * unitPrice
         itemInfo.Text = "📦 " .. tostring(item.name or "未知商品") .. "\n💰 总计: " .. totalPrice .. " 金币"
     end
@@ -346,7 +343,9 @@ local function checkAdminStatusChange()
     -- 使用AdminController检查权限
     local currentAdminStatus = false
     local success, AdminController = pcall(function()
-        return require(script.Parent.Parent.controller.AdminController)
+        local Players = game:GetService("Players")
+        local StarterPlayer = game:GetService("StarterPlayer")
+        return require(StarterPlayer.StarterPlayerScripts.Client.controller.AdminController)
     end)
 
     if success and AdminController then
@@ -805,7 +804,7 @@ function ShopUI.disconnectEvents()
     print("🔌 [事件管理] 已断开所有事件连接")
 end
 
--- 事件连接 - 使用控制器事件系统
+-- 事件连接 - 监听全局Controller事件
 function ShopUI.connectEvents()
     -- 如果已经连接过事件，先断开旧连接
     if eventsConnected then
@@ -813,7 +812,44 @@ function ShopUI.connectEvents()
         ShopUI.disconnectEvents()
     end
 
-    -- 检查控制器是否已设置
+    -- 等待Controller初始化完成
+    spawn(function()
+        while not UserController do
+            local Players = game:GetService("Players")
+            local player = Players.LocalPlayer
+            local playerScripts = player:WaitForChild("PlayerScripts")
+            local clientFolder = playerScripts:FindFirstChild("Client")
+            if clientFolder and clientFolder:FindFirstChild("controller") then
+                local controllerFolder = clientFolder.controller
+                if controllerFolder:FindFirstChild("UserController") then
+                    UserController = require(controllerFolder.UserController)
+                    break
+                end
+            end
+            wait(1)
+        end
+
+        while not AdminController do
+            local Players = game:GetService("Players")
+            local player = Players.LocalPlayer
+            local playerScripts = player:WaitForChild("PlayerScripts")
+            local clientFolder = playerScripts:FindFirstChild("Client")
+            if clientFolder and clientFolder:FindFirstChild("controller") then
+                local controllerFolder = clientFolder.controller
+                if controllerFolder:FindFirstChild("AdminController") then
+                    AdminController = require(controllerFolder.AdminController)
+                    break
+                end
+            end
+            wait(1)
+        end
+
+        ShopUI._connectControllerEvents()
+    end)
+end
+
+-- 内部事件连接函数
+function ShopUI._connectControllerEvents()
     if not UserController or not UserController.Events then
         warn("❌ [ShopUI] UserController或其事件系统未初始化")
         return
@@ -830,7 +866,7 @@ function ShopUI.connectEvents()
             if oldCoins ~= data.coins then
                 local coinDiff = data.coins - oldCoins
                 local message = coinDiff > 0 and "💰 金币增加 +" .. coinDiff or "💰 金币减少 " .. coinDiff
-                print("💰 [金币变化] " .. message)
+                print("💰 [金币变化] " .. message .. " | 立即更新UI显示")
             end
 
             -- 更新会员状态
@@ -838,6 +874,7 @@ function ShopUI.connectEvents()
 
             -- 更新UI
             ShopUI.updateUI()
+            print("🔄 [UI更新] 界面已刷新，当前显示金币: " .. (data.coins or 0))
         else
             warn("⚠️ [数据同步] 玩家数据为空，可能存在网络连接问题")
             -- 设置默认数据防止空指针错误
@@ -1040,27 +1077,13 @@ function ShopUI.connectEvents()
     print("🔗 [事件管理] 所有事件已成功连接")
 end
 
--- 设置控制器
-function ShopUI.setControllers(userController, adminController)
-    UserController = userController
-    AdminController = adminController
-    print("✅ [ShopUI] 控制器已设置")
-end
-
--- 初始化
+-- 初始化（分层架构版本）
 function ShopUI.init()
+    -- UI层通过事件监听Controller，不需要直接设置Controller引用
     ShopUI.connectEvents()
 
-    print("🎨 [商店UI] 商店系统已就绪")
+    print("🎨 [商店UI] 商店系统已就绪（分层架构）")
     print("🔧 [控制] 按 E 键打开商店")
-end
-
--- 带控制器的初始化
-function ShopUI.initWithControllers(userController, adminController)
-    ShopUI.setControllers(userController, adminController)
-    ShopUI.init()
-
-    print("✅ [ShopUI] 与控制器连接完成")
 end
 
 return ShopUI

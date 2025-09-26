@@ -54,7 +54,7 @@ local function log(message, ...)
     if Config and Config.log then
         Config.log("[服务端]", message, ...)
     else
-        -- 备用日志函数
+        -- 标准日志函数
         Config.log("[服务端]", message, ...)
     end
 end
